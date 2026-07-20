@@ -1,4 +1,4 @@
-# tareas pendientes: subir a git
+
 # comprobar que funciona con IB Gateway y TWS
 # que lo enseñe en TWS
 # sintetizar señal: mm con n endógena
@@ -347,6 +347,11 @@ class MACrossoverStrategy(Strategy):
         return max(Decimal(0), min(max_qty, self.config.trade_size))
 
     def _flatten_and_enter(self, side: OrderSide, bar: Bar, row: dict) -> None:
+        if self.portfolio.is_net_long(self.config.instrument_id) or self.portfolio.is_net_short(
+            self.config.instrument_id,
+        ):
+            self.close_all_positions(self.config.instrument_id)
+
         safe_qty = self._max_safe_quantity(side, float(bar.close))
         if safe_qty <= 0:
             reason = (
@@ -357,11 +362,6 @@ class MACrossoverStrategy(Strategy):
             self.log.warning(f"[ORDER SKIPPED] side={side.name} reason={reason}")
             row["reject_reason"] = reason
             return
-
-        if self.portfolio.is_net_long(self.config.instrument_id) or self.portfolio.is_net_short(
-            self.config.instrument_id,
-        ):
-            self.close_all_positions(self.config.instrument_id)
 
         quantity = Quantity.from_str(str(safe_qty))
         order = self.order_factory.market(
