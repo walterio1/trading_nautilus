@@ -25,6 +25,7 @@ import csv
 import os
 from datetime import timedelta
 from decimal import ROUND_DOWN
+from decimal import ROUND_HALF_UP
 from decimal import Decimal
 
 from nautilus_trader.adapters.interactive_brokers.common import IB
@@ -346,11 +347,37 @@ class MACrossoverStrategy(Strategy):
         max_qty = max_qty.quantize(Decimal("1"), rounding=ROUND_DOWN)
         return max(Decimal(0), min(max_qty, self.config.trade_size))
 
+    def _flatten_position(self) -> None:
+        """
+        Close the current position with a manually-sized market order.
+
+        IDEALPRO rejects fractional FX order quantities, but the position
+        size Nautilus tracks can carry a fractional remainder (observed:
+        EUR-denominated commissions getting folded into position quantity
+        instead of staying purely a cost), so close_all_positions() -
+        which sizes its order off that exact fractional net position - gets
+        rejected by IB and leaves the strategy stuck. Rounding to the
+        nearest whole unit here may leave <1 unit of residual dust, which
+        is negligible at this trade size.
+        """
+        net_position = self.portfolio.net_position(self.config.instrument_id)
+        if net_position == 0:
+            return
+
+        close_qty = Decimal(str(abs(net_position))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if close_qty <= 0:
+            return
+
+        close_side = OrderSide.BUY if net_position < 0 else OrderSide.SELL
+        order = self.order_factory.market(
+            instrument_id=self.config.instrument_id,
+            order_side=close_side,
+            quantity=Quantity.from_str(str(close_qty)),
+        )
+        self.submit_order(order)
+
     def _flatten_and_enter(self, side: OrderSide, bar: Bar, row: dict) -> None:
-        if self.portfolio.is_net_long(self.config.instrument_id) or self.portfolio.is_net_short(
-            self.config.instrument_id,
-        ):
-            self.close_all_positions(self.config.instrument_id)
+        self._flatten_position()
 
         safe_qty = self._max_safe_quantity(side, float(bar.close))
         if safe_qty <= 0:
@@ -404,7 +431,7 @@ class MACrossoverStrategy(Strategy):
 
     def on_stop(self) -> None:
         self.clock.cancel_timer(f"{self.id}-heartbeat")
-        self.close_all_positions(self.config.instrument_id)
+        self._flatten_position()
         self.unsubscribe_bars(self.config.bar_type)
         self._write_audit_csv()
 
