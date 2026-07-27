@@ -22,6 +22,7 @@ Stop with Ctrl+C (the node will disconnect and shut down cleanly).
 """
 
 import csv
+import json
 import os
 from datetime import timedelta
 from decimal import ROUND_DOWN
@@ -322,27 +323,54 @@ class MACrossoverStrategy(Strategy):
             self.log.info("Fast MA crossed below slow MA -> SELL")
             self._flatten_and_enter(OrderSide.SELL, bar, row)
 
+    def _free_cash(self, currency: Currency) -> Decimal | None:
+        """
+        Work around a nautilus_trader IB-adapter bug: `_on_account_summary`
+        (adapters/interactive_brokers/execution.py) emits one AccountState
+        per currency, each marked reported=True but containing only that
+        one currency's balance - so each event wipes the account's
+        knowledge of every other currency instead of merging, and
+        `account.balance_free()` on a multi-currency account only ever
+        reflects whichever currency was processed last (in our logs: EUR
+        always wins, USD free cash is invisible even when the account
+        genuinely holds a large USD balance). The adapter separately caches
+        the full, correct multi-currency summary it built internally
+        (see execution.py's `self._cache.add("accountSummary:...", ...)`),
+        so read that directly instead of the broken Account object.
+        """
+        account = self.portfolio.account(IB_VENUE)
+        if account is None:
+            return None
+
+        raw = self.cache.get(f"accountSummary:{account.id.get_id()}")
+        if raw is None:
+            return None
+
+        try:
+            summary = json.loads(raw)
+        except ValueError:
+            return None
+
+        free_funds = summary.get(currency.code, {}).get("FullAvailableFunds")
+        return Decimal(str(free_funds)) if free_funds is not None else None
+
     def _max_safe_quantity(self, side: OrderSide, ref_price: float) -> Decimal:
         """
         Cap order size to what the account can afford without going negative
         (leveraged) in the currency being spent, so IB won't reject the order.
         """
-        account = self.portfolio.account(IB_VENUE)
-        if account is None:
-            return Decimal(0)
-
         if side == OrderSide.BUY:
             # Paying quote currency to receive base currency.
-            free = account.balance_free(self._quote_currency)
+            free = self._free_cash(self._quote_currency)
             if free is None:
                 return Decimal(0)
-            max_qty = (free.as_decimal() / Decimal(str(ref_price))) * LEVERAGE_SAFETY_BUFFER
+            max_qty = (free / Decimal(str(ref_price))) * LEVERAGE_SAFETY_BUFFER
         else:
             # Paying (selling) base currency to receive quote currency.
-            free = account.balance_free(self._base_currency)
+            free = self._free_cash(self._base_currency)
             if free is None:
                 return Decimal(0)
-            max_qty = free.as_decimal() * LEVERAGE_SAFETY_BUFFER
+            max_qty = free * LEVERAGE_SAFETY_BUFFER
 
         max_qty = max_qty.quantize(Decimal("1"), rounding=ROUND_DOWN)
         return max(Decimal(0), min(max_qty, self.config.trade_size))
