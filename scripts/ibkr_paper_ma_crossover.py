@@ -1,4 +1,4 @@
-
+# no funciona el audit
 # comprobar que funciona con IB Gateway y TWS
 # que lo enseñe en TWS
 # sintetizar señal: mm con n endógena
@@ -554,6 +554,15 @@ def main() -> None:
 
     try:
         node.run()
+    except KeyboardInterrupt:
+        # nautilus_trader's graceful-shutdown signal handler is a no-op on
+        # Windows (see nautilus_trader.system.kernel: `_setup_loop()` is
+        # skipped when platform.system() == "Windows"), so Ctrl-C surfaces
+        # here as a plain KeyboardInterrupt instead of going through
+        # node.stop() on its own. Call it explicitly so Strategy.on_stop()
+        # still runs (flattening the position and writing the audit CSV)
+        # before disposal.
+        node.stop()
     finally:
         node.dispose()
 
