@@ -22,10 +22,8 @@ Stop with Ctrl+C (the node will disconnect and shut down cleanly).
 """
 
 import csv
-import json
 import os
 from datetime import timedelta
-from decimal import ROUND_DOWN
 from decimal import ROUND_HALF_UP
 from decimal import Decimal
 
@@ -64,7 +62,6 @@ from nautilus_trader.model.events import PositionClosed
 from nautilus_trader.model.events import PositionOpened
 from nautilus_trader.model.identifiers import ClientOrderId
 from nautilus_trader.model.identifiers import InstrumentId
-from nautilus_trader.model.objects import Currency
 from nautilus_trader.model.objects import Quantity
 from nautilus_trader.trading.strategy import Strategy
 from nautilus_trader.trading.strategy import StrategyConfig
@@ -104,24 +101,12 @@ BAR_AGGREGATION_SOURCE = "INTERNAL"  # "EXTERNAL" = IB's native real-time bars
 FAST_MA_PERIOD = 2                # Minimum useful values for fast debugging:
 SLOW_MA_PERIOD = 4                 #   both MAs initialize after a few bars
                                     #   instead of waiting for a real trend window
-TRADE_SIZE = Decimal(20000)      # Ceiling quantity per order (FX base currency
-                                 # units; IDEALPRO's typical minimum is 20,000).
-                                 # Actual size may be reduced — see
-                                 # LEVERAGE_SAFETY_BUFFER below.
+TRADE_SIZE = Decimal(20000)      # Quantity per order (FX base currency units;
+                                 # IDEALPRO's typical minimum is 20,000). Sent
+                                 # as-is on every entry - no client-side cash
+                                 # pre-check (see _flatten_and_enter); IB
+                                 # rejects the order itself if funds are short.
 HEARTBEAT_INTERVAL_SECONDS = 30  # How often to log account/position/indicator status
-
-# ============================================================================
-# CURRENCY / LEVERAGE SAFETY
-# ============================================================================
-# IB will reject an FX order with "would expose account to currency leverage"
-# if it would require spending more of a currency than the account actually
-# holds (e.g. buying EUR/USD needs free USD cash; a cash account funded only
-# in EUR has none, so any BUY beyond what's covered by prior SELL proceeds is
-# rejected regardless of size). To avoid that, every order is sized down (at
-# submission time) to what the account can currently afford unlevered; if
-# available cash rounds to zero the order is skipped instead of submitted.
-LEVERAGE_SAFETY_BUFFER = Decimal("0.98")  # use at most 98% of free cash per order,
-                                           # leaving headroom for spread/fees
 
 # ============================================================================
 # LOGGING (traces are written to stdout AND to a rotating log file)
@@ -162,9 +147,6 @@ class MACrossoverStrategy(Strategy):
         self._fast_ma_ready_logged = False
         self._slow_ma_ready_logged = False
         self._prev_diff: float | None = None
-
-        self._base_currency = Currency.from_str(self.config.instrument_id.symbol.value.split("/")[0])
-        self._quote_currency = Currency.from_str(self.config.instrument_id.symbol.value.split("/")[1])
 
         self._audit_rows: list[dict] = []
         self._pending_order_rows: dict[ClientOrderId, dict] = {}
@@ -318,62 +300,10 @@ class MACrossoverStrategy(Strategy):
 
         if fast > slow and net_position <= 0:
             self.log.info("Fast MA crossed above slow MA -> BUY")
-            self._flatten_and_enter(OrderSide.BUY, bar, row)
+            self._flatten_and_enter(OrderSide.BUY, row)
         elif fast < slow and net_position >= 0:
             self.log.info("Fast MA crossed below slow MA -> SELL")
-            self._flatten_and_enter(OrderSide.SELL, bar, row)
-
-    def _free_cash(self, currency: Currency) -> Decimal | None:
-        """
-        Work around a nautilus_trader IB-adapter bug: `_on_account_summary`
-        (adapters/interactive_brokers/execution.py) emits one AccountState
-        per currency, each marked reported=True but containing only that
-        one currency's balance - so each event wipes the account's
-        knowledge of every other currency instead of merging, and
-        `account.balance_free()` on a multi-currency account only ever
-        reflects whichever currency was processed last (in our logs: EUR
-        always wins, USD free cash is invisible even when the account
-        genuinely holds a large USD balance). The adapter separately caches
-        the full, correct multi-currency summary it built internally
-        (see execution.py's `self._cache.add("accountSummary:...", ...)`),
-        so read that directly instead of the broken Account object.
-        """
-        account = self.portfolio.account(IB_VENUE)
-        if account is None:
-            return None
-
-        raw = self.cache.get(f"accountSummary:{account.id.get_id()}")
-        if raw is None:
-            return None
-
-        try:
-            summary = json.loads(raw)
-        except ValueError:
-            return None
-
-        free_funds = summary.get(currency.code, {}).get("FullAvailableFunds")
-        return Decimal(str(free_funds)) if free_funds is not None else None
-
-    def _max_safe_quantity(self, side: OrderSide, ref_price: float) -> Decimal:
-        """
-        Cap order size to what the account can afford without going negative
-        (leveraged) in the currency being spent, so IB won't reject the order.
-        """
-        if side == OrderSide.BUY:
-            # Paying quote currency to receive base currency.
-            free = self._free_cash(self._quote_currency)
-            if free is None:
-                return Decimal(0)
-            max_qty = (free / Decimal(str(ref_price))) * LEVERAGE_SAFETY_BUFFER
-        else:
-            # Paying (selling) base currency to receive quote currency.
-            free = self._free_cash(self._base_currency)
-            if free is None:
-                return Decimal(0)
-            max_qty = free * LEVERAGE_SAFETY_BUFFER
-
-        max_qty = max_qty.quantize(Decimal("1"), rounding=ROUND_DOWN)
-        return max(Decimal(0), min(max_qty, self.config.trade_size))
+            self._flatten_and_enter(OrderSide.SELL, row)
 
     def _flatten_position(self) -> None:
         """
@@ -404,27 +334,26 @@ class MACrossoverStrategy(Strategy):
         )
         self.submit_order(order)
 
-    def _flatten_and_enter(self, side: OrderSide, bar: Bar, row: dict) -> None:
+    def _flatten_and_enter(self, side: OrderSide, row: dict) -> None:
+        """
+        Flatten whatever position is open, then enter `side` at the full
+        configured trade size.
+
+        No client-side cash pre-check: IB's account-summary API (as used by
+        nautilus_trader's adapter) only reports totals in the account's base
+        currency (EUR here), never a real per-currency free-cash figure for
+        USD, so there is no reliable way to size against it from this side.
+        If the account genuinely lacks the funds, IB will reject the order
+        and on_order_rejected records that in the audit trail.
+        """
         self._flatten_position()
 
-        safe_qty = self._max_safe_quantity(side, float(bar.close))
-        if safe_qty <= 0:
-            reason = (
-                f"insufficient "
-                f"{self._quote_currency if side == OrderSide.BUY else self._base_currency} "
-                f"cash to enter {side.name} without leverage"
-            )
-            self.log.warning(f"[ORDER SKIPPED] side={side.name} reason={reason}")
-            row["reject_reason"] = reason
-            return
-
-        quantity = Quantity.from_str(str(safe_qty))
         order = self.order_factory.market(
             instrument_id=self.config.instrument_id,
             order_side=side,
-            quantity=quantity,
+            quantity=self.trade_size,
         )
-        row["trade"] = f"{'+' if side == OrderSide.BUY else '-'}{safe_qty}"
+        row["trade"] = f"{'+' if side == OrderSide.BUY else '-'}{self.trade_size}"
         self._pending_order_rows[order.client_order_id] = row
         self.submit_order(order)
 
