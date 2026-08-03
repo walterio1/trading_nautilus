@@ -1,6 +1,3 @@
-# no funciona el audit
-# comprobar que funciona con IB Gateway y TWS
-# que lo enseñe en TWS
 # sintetizar señal: mm con n endógena
 
 """
@@ -101,11 +98,13 @@ BAR_AGGREGATION_SOURCE = "INTERNAL"  # "EXTERNAL" = IB's native real-time bars
 FAST_MA_PERIOD = 2                # Minimum useful values for fast debugging:
 SLOW_MA_PERIOD = 4                 #   both MAs initialize after a few bars
                                     #   instead of waiting for a real trend window
-TRADE_SIZE = Decimal(20000)      # Quantity per order (FX base currency units;
-                                 # IDEALPRO's typical minimum is 20,000). Sent
-                                 # as-is on every entry - no client-side cash
-                                 # pre-check (see _flatten_and_enter); IB
-                                 # rejects the order itself if funds are short.
+TRADE_SIZE = Decimal(20000)      # Target position size (FX base currency units;
+                                 # IDEALPRO's typical minimum is 20,000). This is
+                                 # the size the strategy holds after an entry; a
+                                 # reversal sends |current position| + TRADE_SIZE
+                                 # in one order (see _reverse_to). No client-side
+                                 # cash pre-check - IB rejects the order itself
+                                 # if funds are short.
 HEARTBEAT_INTERVAL_SECONDS = 30  # How often to log account/position/indicator status
 
 # ============================================================================
@@ -133,8 +132,11 @@ class MACrossoverConfig(StrategyConfig, frozen=True):
 class MACrossoverStrategy(Strategy):
     """
     Minimal moving-average crossover strategy:
-      - Fast MA crosses above slow MA  -> go long (flatten short first)
-      - Fast MA crosses below slow MA  -> go short (flatten long first)
+      - Fast MA crosses above slow MA  -> go long
+      - Fast MA crosses below slow MA  -> go short
+
+    A reversal is sent as one market order (close + entry combined), so
+    only one commission is paid per direction change.
     """
 
     def __init__(self, config: MACrossoverConfig) -> None:
@@ -300,32 +302,40 @@ class MACrossoverStrategy(Strategy):
 
         if fast > slow and net_position <= 0:
             self.log.info("Fast MA crossed above slow MA -> BUY")
-            self._flatten_and_enter(OrderSide.BUY, row)
+            self._reverse_to(OrderSide.BUY, row)
         elif fast < slow and net_position >= 0:
             self.log.info("Fast MA crossed below slow MA -> SELL")
-            self._flatten_and_enter(OrderSide.SELL, row)
+            self._reverse_to(OrderSide.SELL, row)
 
-    def _flatten_position(self) -> None:
+    def _closable_quantity(self) -> Decimal:
         """
-        Close the current position with a manually-sized market order.
+        Absolute size of the open position, rounded to a whole unit.
 
         IDEALPRO rejects fractional FX order quantities, but the position
         size Nautilus tracks can carry a fractional remainder (observed:
         EUR-denominated commissions getting folded into position quantity
-        instead of staying purely a cost), so close_all_positions() -
-        which sizes its order off that exact fractional net position - gets
-        rejected by IB and leaves the strategy stuck. Rounding to the
-        nearest whole unit here may leave <1 unit of residual dust, which
-        is negligible at this trade size.
+        instead of staying purely a cost), so an order sized off that exact
+        fractional net position gets rejected by IB and leaves the strategy
+        stuck. Rounding to the nearest whole unit may leave <1 unit of
+        residual dust, which is negligible at this trade size.
         """
         net_position = self.portfolio.net_position(self.config.instrument_id)
         if net_position == 0:
-            return
+            return Decimal(0)
 
-        close_qty = Decimal(str(abs(net_position))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        qty = Decimal(str(abs(net_position))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return qty if qty > 0 else Decimal(0)
+
+    def _flatten_position(self) -> None:
+        """
+        Close the current position with a manually-sized market order
+        (used on shutdown; reversals go through _reverse_to instead).
+        """
+        close_qty = self._closable_quantity()
         if close_qty <= 0:
             return
 
+        net_position = self.portfolio.net_position(self.config.instrument_id)
         close_side = OrderSide.BUY if net_position < 0 else OrderSide.SELL
         order = self.order_factory.market(
             instrument_id=self.config.instrument_id,
@@ -334,10 +344,14 @@ class MACrossoverStrategy(Strategy):
         )
         self.submit_order(order)
 
-    def _flatten_and_enter(self, side: OrderSide, row: dict) -> None:
+    def _reverse_to(self, side: OrderSide, row: dict) -> None:
         """
-        Flatten whatever position is open, then enter `side` at the full
-        configured trade size.
+        Move to a `trade_size` position on `side` with a SINGLE market order.
+
+        When a position is open on the opposite side, closing it and opening
+        the new one are merged into one order of |current position| +
+        trade_size, so IB charges one commission (and one bid/ask crossing)
+        instead of two. The resulting net position is trade_size on `side`.
 
         No client-side cash pre-check: IB's account-summary API (as used by
         nautilus_trader's adapter) only reports totals in the account's base
@@ -346,14 +360,29 @@ class MACrossoverStrategy(Strategy):
         If the account genuinely lacks the funds, IB will reject the order
         and on_order_rejected records that in the audit trail.
         """
-        self._flatten_position()
+        net_position = self.portfolio.net_position(self.config.instrument_id)
+        opposite_open = (side == OrderSide.BUY and net_position < 0) or (
+            side == OrderSide.SELL and net_position > 0
+        )
+        close_qty = self._closable_quantity() if opposite_open else Decimal(0)
+        order_qty = close_qty + self.config.trade_size
 
         order = self.order_factory.market(
             instrument_id=self.config.instrument_id,
             order_side=side,
-            quantity=self.trade_size,
+            quantity=Quantity.from_str(str(order_qty)),
         )
-        row["trade"] = f"{'+' if side == OrderSide.BUY else '-'}{self.trade_size}"
+
+        sign = "+" if side == OrderSide.BUY else "-"
+        row["trade"] = f"{sign}{order_qty}"
+        if close_qty > 0:
+            row["note"] = (
+                f"REVERSAL single order: close={close_qty} + entry={self.config.trade_size}"
+            )
+            self.log.info(
+                f"Reversing in one order: close {close_qty} + enter "
+                f"{self.config.trade_size} = {order_qty} {side}",
+            )
         self._pending_order_rows[order.client_order_id] = row
         self.submit_order(order)
 
