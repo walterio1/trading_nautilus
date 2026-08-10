@@ -1,4 +1,7 @@
-# sintetizar señal: mm con n endógena
+# aún no he hecho el commit push 
+# drawio? 
+# probar barras 15 min con las mm endógenas actuales
+# ver si hallo mecanismo de endogeneización para N mucho mayor
 
 """
 Minimal paper-trading test: SMA crossover strategy on Interactive Brokers (TWS/IB Gateway).
@@ -20,6 +23,7 @@ Stop with Ctrl+C (the node will disconnect and shut down cleanly).
 
 import csv
 import os
+from collections import deque
 from datetime import timedelta
 from decimal import ROUND_HALF_UP
 from decimal import Decimal
@@ -46,7 +50,6 @@ from nautilus_trader.common.component import TimeEvent
 from nautilus_trader.config import LoggingConfig
 from nautilus_trader.config import TradingNodeConfig
 from nautilus_trader.core.datetime import unix_nanos_to_dt
-from nautilus_trader.indicators.averages import SimpleMovingAverage
 from nautilus_trader.live.node import TradingNode
 from nautilus_trader.model.data import Bar
 from nautilus_trader.model.data import BarType
@@ -95,9 +98,10 @@ BAR_AGGREGATION_SOURCE = "INTERNAL"  # "EXTERNAL" = IB's native real-time bars
                                      # "INTERNAL" = Nautilus builds bars locally from
                                      #   quote ticks — required for any other step
                                      #   (e.g. "1-SECOND", "10-SECOND", "20-SECOND")
-FAST_MA_PERIOD = 2                # Minimum useful values for fast debugging:
-SLOW_MA_PERIOD = 4                 #   both MAs initialize after a few bars
-                                    #   instead of waiting for a real trend window
+# Neither MA has a period parameter: both windows are derived from the
+# series' own run dynamics. The fast MA reads the runs of the raw increments
+# (RunLengthMovingAverage); the slow MA reads the runs of the moving average
+# of those increments (SmoothedRunLengthMovingAverage).
 TRADE_SIZE = Decimal(20000)      # Target position size (FX base currency units;
                                  # IDEALPRO's typical minimum is 20,000). This is
                                  # the size the strategy holds after an entry; a
@@ -120,11 +124,219 @@ LOG_LEVEL_FILE = "DEBUG"
 AUDIT_DIRECTORY = "audit"
 
 
+# Hard cap on the price buffer. N(t) is the sum of two live runs and two
+# completed ones, so it only reaches this size under a run structure that
+# cannot occur on real data; the cap just bounds memory and slicing cost.
+MAX_ENDOGENOUS_WINDOW = 4096
+
+
+class RunLengthWindow:
+    """
+    Turns a stream of signs (+1 / -1 / 0) into an endogenous window length
+    N(t), read off the run (streak) structure of that stream.
+
+      run_up(t)          consecutive +1 observations up to and including t;
+                         reset to 0 as soon as an observation is -1 or 0
+      run_down(t)        same for consecutive -1 observations
+      prev_run_up(t)     length of the last COMPLETED bullish run (the value
+                         run_up held on the observation immediately before
+                         its reset); constant until the next bullish run
+                         completes
+      prev_run_down(t)   same for the bearish side
+      N(t)               run_up + run_down + prev_run_up + prev_run_down,
+                         defined only once both completed runs exist
+
+    At most one of run_up/run_down is non-zero at any t (both are zero after
+    a 0 observation), and every completed run has length >= 1, so N(t) >= 2
+    once defined. Each unit of N(t) corresponds to a distinct observation at
+    or before t.
+    """
+
+    def __init__(self) -> None:
+        self.run_up = 0
+        self.run_down = 0
+        self.prev_run_up: int | None = None
+        self.prev_run_down: int | None = None
+        self.period = 0  # Current N(t); 0 while still undefined
+
+    @property
+    def ready(self) -> bool:
+        """Whether one run of each sign has completed, so N(t) is defined."""
+        return self.prev_run_up is not None and self.prev_run_down is not None
+
+    def _close_run_up(self) -> None:
+        if self.run_up > 0:
+            self.prev_run_up = self.run_up
+            self.run_up = 0
+
+    def _close_run_down(self) -> None:
+        if self.run_down > 0:
+            self.prev_run_down = self.run_down
+            self.run_down = 0
+
+    def update(self, sign: int) -> int:
+        """Feed one sign; returns N(t), or 0 while it is still undefined."""
+        if sign > 0:
+            self._close_run_down()
+            self.run_up += 1
+        elif sign < 0:
+            self._close_run_up()
+            self.run_down += 1
+        else:
+            # A zero observation closes whichever run was live, starts neither.
+            self._close_run_up()
+            self._close_run_down()
+
+        if not self.ready:
+            return 0
+
+        self.period = self.run_up + self.run_down + self.prev_run_up + self.prev_run_down
+        return self.period
+
+    def state_repr(self) -> str:
+        return (
+            f"run_up={self.run_up} run_down={self.run_down} "
+            f"prev_run_up={self.prev_run_up} prev_run_down={self.prev_run_down} "
+            f"N={self.period}"
+        )
+
+
+def _sign(value: Decimal) -> int:
+    if value > 0:
+        return 1
+    if value < 0:
+        return -1
+    return 0
+
+
+class RunLengthMovingAverage:
+    """
+    Fast MA: window length endogenous, driven by the run dynamics of the
+    INCREMENT series (the price series differenced once).
+
+    Fixing a period exogenously adds an arbitrary degree of freedom. Here
+    the window adapts to how the series is actually alternating: while a
+    streak persists the window stretches, and it contracts back towards the
+    length of the last completed streaks when direction flips.
+
+    Base series : increments, d(t) = p(t) - p(t-1)
+    Sign        : sign of d(t) - +1 up, -1 down, 0 exactly flat
+    Window      : N(t) from RunLengthWindow over those signs
+    Value       : mean of the last N(t) PRICES, ending at t
+
+    Prices are carried as Decimal so that "flat" means exactly flat, with no
+    float-representation artifacts deciding the sign of a bar.
+    """
+
+    def __init__(self) -> None:
+        self._prices: deque[Decimal] = deque(maxlen=MAX_ENDOGENOUS_WINDOW)
+        self._prev_price: Decimal | None = None
+
+        self.runs = RunLengthWindow()
+        self.count = 0        # Observations received
+        self.value = 0.0      # Current MM(t)
+        self.initialized = False
+
+    @property
+    def period(self) -> int:
+        return self.runs.period
+
+    def update_raw(self, price: Decimal) -> None:
+        self._prices.append(price)
+        self.count += 1
+
+        prev_price = self._prev_price
+        self._prev_price = price
+        if prev_price is None:
+            return  # No increment yet
+
+        n = self.runs.update(_sign(price - prev_price))
+        if n <= 0 or n > len(self._prices):
+            return  # Undefined, or (unreachable) beyond the buffer
+
+        window = list(self._prices)[-n:]
+        self.value = float(sum(window) / n)
+        self.initialized = True
+
+    def state_repr(self) -> str:
+        return self.runs.state_repr()
+
+
+class SmoothedRunLengthMovingAverage:
+    """
+    Slow MA: same endogenous-window construction as RunLengthMovingAverage,
+    but the run dynamics are read off the MOVING AVERAGE of the increments
+    instead of the raw increments.
+
+    Base series : s(t) = mean of the last k increments
+    Sign        : sign of s(t)
+    Window      : N_slow(t) from RunLengthWindow over those signs
+    Value       : mean of the last N_slow(t) PRICES, ending at t
+
+    Two things worth being explicit about:
+
+    1. The mean of the last k increments telescopes,
+           s(t) = [p(t) - p(t-k)] / k,
+       so sign(s(t)) is exactly the sign of the k-bar momentum. Averaging the
+       increments therefore acts as a low-pass filter on the sign stream: it
+       only flips when the move over k bars changes direction, not on every
+       single bar. Runs get longer, N_slow gets larger, and the MA gets
+       slower than the fast one - which is the point.
+
+    2. k is taken from the fast MA's own endogenous window N_fast(t), passed
+       in on each update. Using a fixed k would put back exactly the
+       arbitrary degree of freedom this construction exists to remove.
+
+    The value is the mean of the last N_slow PRICES (not of the smoothed
+    increments) so that both MAs live in price units and their crossover
+    remains meaningful.
+    """
+
+    def __init__(self) -> None:
+        self._prices: deque[Decimal] = deque(maxlen=MAX_ENDOGENOUS_WINDOW)
+
+        self.runs = RunLengthWindow()
+        self.count = 0
+        self.value = 0.0
+        self.initialized = False
+        self.smoothed_increment: Decimal | None = None  # s(t), for tracing
+
+    @property
+    def period(self) -> int:
+        return self.runs.period
+
+    def update_raw(self, price: Decimal, increment_window: int) -> None:
+        """
+        Feed one price. `increment_window` is k, the number of increments to
+        average - the fast MA's current N. Updates are skipped while k is
+        undefined (fast MA still warming up) or while fewer than k+1 prices
+        have been seen, so this MA always initializes after the fast one.
+        """
+        self._prices.append(price)
+        self.count += 1
+
+        if increment_window <= 0 or len(self._prices) <= increment_window:
+            return
+
+        self.smoothed_increment = (
+            self._prices[-1] - self._prices[-1 - increment_window]
+        ) / increment_window
+
+        n = self.runs.update(_sign(self.smoothed_increment))
+        if n <= 0 or n > len(self._prices):
+            return
+
+        window = list(self._prices)[-n:]
+        self.value = float(sum(window) / n)
+        self.initialized = True
+
+    def state_repr(self) -> str:
+        return self.runs.state_repr()
+
+
 class MACrossoverConfig(StrategyConfig, frozen=True):
     instrument_id: InstrumentId
     bar_type: BarType
-    fast_period: int = 10
-    slow_period: int = 30
     trade_size: Decimal = Decimal(10)
     heartbeat_interval_seconds: int = 30
 
@@ -135,6 +347,10 @@ class MACrossoverStrategy(Strategy):
       - Fast MA crosses above slow MA  -> go long
       - Fast MA crosses below slow MA  -> go short
 
+    Neither MA has a period parameter: both windows are endogenous, derived
+    from the series' own run dynamics. The fast MA runs on the raw
+    increments, the slow MA on the moving average of those increments.
+
     A reversal is sent as one market order (close + entry combined), so
     only one commission is paid per direction change.
     """
@@ -142,8 +358,8 @@ class MACrossoverStrategy(Strategy):
     def __init__(self, config: MACrossoverConfig) -> None:
         super().__init__(config)
 
-        self.fast_ma = SimpleMovingAverage(config.fast_period)
-        self.slow_ma = SimpleMovingAverage(config.slow_period)
+        self.fast_ma = RunLengthMovingAverage()
+        self.slow_ma = SmoothedRunLengthMovingAverage()
         self.trade_size = Quantity.from_str(str(config.trade_size))
 
         self._fast_ma_ready_logged = False
@@ -164,10 +380,8 @@ class MACrossoverStrategy(Strategy):
             self.stop()
             return
 
-        # Register indicators so they're fed automatically as bars arrive
-        self.register_indicator_for_bars(self.config.bar_type, self.fast_ma)
-        self.register_indicator_for_bars(self.config.bar_type, self.slow_ma)
-
+        # Neither MA is a Nautilus indicator, so on_bar updates both by hand
+        # (first thing, matching the framework's update-then-handle order).
         self.subscribe_bars(self.config.bar_type)
 
         os.makedirs(AUDIT_DIRECTORY, exist_ok=True)
@@ -179,7 +393,8 @@ class MACrossoverStrategy(Strategy):
         self.log.info(
             f"Started | instrument={self.config.instrument_id} "
             f"bar_type={self.config.bar_type} "
-            f"fast_ma={self.config.fast_period} slow_ma={self.config.slow_period} "
+            f"fast_ma=endogenous(increment runs) "
+            f"slow_ma=endogenous(smoothed-increment runs) "
             f"trade_size={self.trade_size} audit_file={self._audit_file_path}",
         )
 
@@ -200,14 +415,14 @@ class MACrossoverStrategy(Strategy):
         balances = account.balances_total() if account is not None else {}
 
         fast_repr = (
-            f"{self.fast_ma.value:.4f}"
+            f"{self.fast_ma.value:.4f}(N={self.fast_ma.period})"
             if self.fast_ma.initialized
-            else f"warming_up({self.fast_ma.count}/{self.fast_ma.period})"
+            else f"warming_up({self.fast_ma.count} bars, {self.fast_ma.state_repr()})"
         )
         slow_repr = (
-            f"{self.slow_ma.value:.4f}"
+            f"{self.slow_ma.value:.4f}(N={self.slow_ma.period})"
             if self.slow_ma.initialized
-            else f"warming_up({self.slow_ma.count}/{self.slow_ma.period})"
+            else f"warming_up({self.slow_ma.count} bars, {self.slow_ma.state_repr()})"
         )
 
         self.log.info(
@@ -219,25 +434,27 @@ class MACrossoverStrategy(Strategy):
     def _trace_indicators(self, bar: Bar) -> tuple[float, str] | tuple[None, None]:
         if not self.fast_ma.initialized:
             self.log.debug(
-                f"[INDICATOR] fast_ma warming up: {self.fast_ma.count}/{self.fast_ma.period} "
-                f"bars received (last close={bar.close})",
+                f"[INDICATOR] fast_ma warming up: {self.fast_ma.count} bars received, "
+                f"waiting for one completed run of each sign - "
+                f"{self.fast_ma.state_repr()} (last close={bar.close})",
             )
         elif not self._fast_ma_ready_logged:
             self.log.info(
-                f"[INDICATOR] fast_ma initialized period={self.fast_ma.period} "
-                f"value={self.fast_ma.value:.4f}",
+                f"[INDICATOR] fast_ma initialized with endogenous window "
+                f"N={self.fast_ma.period} value={self.fast_ma.value:.4f}",
             )
             self._fast_ma_ready_logged = True
 
         if not self.slow_ma.initialized:
             self.log.debug(
-                f"[INDICATOR] slow_ma warming up: {self.slow_ma.count}/{self.slow_ma.period} "
-                f"bars received (last close={bar.close})",
+                f"[INDICATOR] slow_ma warming up: {self.slow_ma.count} bars received, "
+                f"waiting for one completed run of each sign on the smoothed "
+                f"increments - {self.slow_ma.state_repr()} (last close={bar.close})",
             )
         elif not self._slow_ma_ready_logged:
             self.log.info(
-                f"[INDICATOR] slow_ma initialized period={self.slow_ma.period} "
-                f"value={self.slow_ma.value:.4f}",
+                f"[INDICATOR] slow_ma initialized with endogenous window "
+                f"N={self.slow_ma.period} value={self.slow_ma.value:.4f}",
             )
             self._slow_ma_ready_logged = True
 
@@ -254,7 +471,8 @@ class MACrossoverStrategy(Strategy):
 
         self.log.info(
             f"[INDICATOR] bar_close={bar.close} fast_ma={self.fast_ma.value:.4f} "
-            f"slow_ma={self.slow_ma.value:.4f} diff={diff:.4f} trend={trend}",
+            f"(N={self.fast_ma.period}) slow_ma={self.slow_ma.value:.4f} "
+            f"(N={self.slow_ma.period}) diff={diff:.4f} trend={trend}",
         )
         self._prev_diff = diff
         return diff, trend
@@ -270,7 +488,11 @@ class MACrossoverStrategy(Strategy):
             "timestamp": timestamp,
             "bar_price": "",
             "short_ma": "",
+            "n_fast": "",
+            "runs_fast": "",
             "long_ma": "",
+            "n_slow": "",
+            "runs_slow": "",
             "ma_diff": "",
             "trend": "",
             "trade": "",
@@ -283,12 +505,22 @@ class MACrossoverStrategy(Strategy):
         }
 
     def on_bar(self, bar: Bar) -> None:
+        # Both MAs are updated by hand, fast first: the slow MA averages the
+        # increments over the fast MA's current endogenous window.
+        close = bar.close.as_decimal()
+        self.fast_ma.update_raw(close)
+        self.slow_ma.update_raw(close, self.fast_ma.period)
+
         diff, trend = self._trace_indicators(bar)
 
         row = self._new_audit_row(unix_nanos_to_dt(bar.ts_event).isoformat())
         row["bar_price"] = str(bar.close)
         row["short_ma"] = f"{self.fast_ma.value:.5f}" if self.fast_ma.initialized else ""
+        row["n_fast"] = str(self.fast_ma.period) if self.fast_ma.initialized else ""
+        row["runs_fast"] = self.fast_ma.state_repr()
         row["long_ma"] = f"{self.slow_ma.value:.5f}" if self.slow_ma.initialized else ""
+        row["n_slow"] = str(self.slow_ma.period) if self.slow_ma.initialized else ""
+        row["runs_slow"] = self.slow_ma.state_repr()
         row["ma_diff"] = f"{diff:.5f}" if diff is not None else ""
         row["trend"] = trend or ""
         self._audit_rows.append(row)
@@ -395,7 +627,11 @@ class MACrossoverStrategy(Strategy):
             "timestamp",
             "bar_price",
             "short_ma",
+            "n_fast",
+            "runs_fast",
             "long_ma",
+            "n_slow",
+            "runs_slow",
             "ma_diff",
             "trend",
             "trade",
@@ -524,8 +760,6 @@ def main() -> None:
     strategy_config = MACrossoverConfig(
         instrument_id=INSTRUMENT_ID,
         bar_type=bar_type,
-        fast_period=FAST_MA_PERIOD,
-        slow_period=SLOW_MA_PERIOD,
         trade_size=TRADE_SIZE,
         heartbeat_interval_seconds=HEARTBEAT_INTERVAL_SECONDS,
     )
