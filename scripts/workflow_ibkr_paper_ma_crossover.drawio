@@ -1,0 +1,717 @@
+<mxfile host="65bd71144e">
+    <diagram id="page1" name="1. Arranque">
+        <mxGraphModel dx="793" dy="525" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1500" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p1-title" value="ibkr_paper_ma_crossover.py — arranque del nodo (main)" style="text;html=1;fontSize=18;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="600" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-start" value="main()" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="330" y="70" width="160" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-contract" value="&lt;b&gt;IBContract&lt;/b&gt;&lt;br&gt;secType=CASH&lt;br&gt;symbol=EUR / currency=USD&lt;br&gt;exchange=IDEALPRO" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="310" y="145" width="200" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-provider" value="&lt;b&gt;InstrumentProviderConfig&lt;/b&gt;&lt;br&gt;load_contracts={contract}" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="310" y="245" width="200" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-dataclient" value="&lt;b&gt;IB DataClientConfig&lt;/b&gt;&lt;br&gt;host 127.0.0.1 : 7497 (TWS paper)&lt;br&gt;client_id=1&lt;br&gt;→ quote ticks EUR/USD" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="80" y="345" width="230" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-execclient" value="&lt;b&gt;IB ExecClientConfig&lt;/b&gt;&lt;br&gt;host 127.0.0.1 : 7497&lt;br&gt;client_id=1&lt;br&gt;account_id=DUO087437 (paper)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="520" y="345" width="230" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-nodecfg" value="&lt;b&gt;TradingNodeConfig&lt;/b&gt;&lt;br&gt;trader_id=PAPER-TRADER-001&lt;br&gt;logging: consola INFO / fichero DEBUG → logs/&lt;br&gt;data_clients={IB} · exec_clients={IB}" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="255" y="465" width="310" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-bartype" value="&lt;b&gt;BarType&lt;/b&gt;&lt;br&gt;EUR/USD.IDEALPRO-20-SECOND-MID-&lt;b&gt;INTERNAL&lt;/b&gt;&lt;br&gt;&lt;i&gt;INTERNAL: Nautilus agrega las barras a partir&lt;br&gt;de los quote ticks (IB solo emite 5-SECOND nativas)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="255" y="580" width="310" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-stratcfg" value="&lt;b&gt;MACrossoverConfig / MACrossoverStrategy&lt;/b&gt;&lt;br&gt;instrument_id, bar_type&lt;br&gt;trade_size = 20 000 EUR (mínimo IDEALPRO)&lt;br&gt;heartbeat = 30 s" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="255" y="705" width="310" height="85" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-build" value="&lt;b&gt;TradingNode&lt;/b&gt;&lt;br&gt;add_strategy · add_data_client_factory&lt;br&gt;add_exec_client_factory · build()" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="255" y="825" width="310" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-run" value="node.run()  — bucle de eventos" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="300" y="930" width="220" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-onstart" value="&lt;b&gt;Strategy.on_start()&lt;/b&gt;&lt;br&gt;1. cache.instrument(...)  →  si None: log.error + stop()&lt;br&gt;2. subscribe_bars(bar_type)&lt;br&gt;3. crear audit/audit_&amp;lt;id&amp;gt;_&amp;lt;ts&amp;gt;.csv&lt;br&gt;4. clock.set_timer(heartbeat, 30 s)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="235" y="1015" width="350" height="105" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-loop" value="Cada barra de 20 s → &lt;b&gt;on_bar&lt;/b&gt; (página 2)&lt;br&gt;Cada 30 s → &lt;b&gt;_log_heartbeat&lt;/b&gt; (posición, PnL, MAs, balances)&lt;br&gt;Eventos de orden/posición → página 4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=10;dashed=1" parent="1" vertex="1">
+                    <mxGeometry x="235" y="1155" width="350" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-tws" value="&lt;b&gt;TWS / IB Gateway&lt;/b&gt;&lt;br&gt;cuenta PAPER&lt;br&gt;API socket habilitada&lt;br&gt;Read-Only API desactivada" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;html=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666" parent="1" vertex="1">
+                    <mxGeometry x="640" y="130" width="150" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e1" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-start" target="p1-contract" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e2" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-contract" target="p1-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e3" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-provider" target="p1-dataclient" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e4" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-provider" target="p1-execclient" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e5" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-dataclient" target="p1-nodecfg" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e6" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-execclient" target="p1-nodecfg" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e7" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-nodecfg" target="p1-bartype" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e8" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-bartype" target="p1-stratcfg" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e9" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-stratcfg" target="p1-build" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e10" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-build" target="p1-run" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e11" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-run" target="p1-onstart" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e12" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" parent="1" source="p1-onstart" target="p1-loop" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e13" value="TCP socket" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;dashed=1;startArrow=classic;startFill=1;" parent="1" source="p1-dataclient" target="p1-tws" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1-e14" value="TCP socket" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;dashed=1;startArrow=classic;startFill=1;" parent="1" source="p1-execclient" target="p1-tws" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="page2" name="2. Ciclo por barra (on_bar)">
+        <mxGraphModel dx="793" dy="525" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="1500" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p2-title" value="on_bar() — un ciclo completo por barra de 20 s" style="text;html=1;fontSize=18;fontStyle=1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="600" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-bar" value="Llega &lt;b&gt;Bar&lt;/b&gt; (20-SECOND-MID)&lt;br&gt;close = bar.close.as_decimal()" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="70" width="250" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-fast" value="&lt;b&gt;1. fast_ma.update_raw(close)&lt;/b&gt;&lt;br&gt;d(t)=p(t)-p(t-1) → sign → N_fast(t)&lt;br&gt;value = media de los últimos N_fast precios" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="355" y="165" width="300" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-slow" value="&lt;b&gt;2. slow_ma.update_raw(close, k = N_fast)&lt;/b&gt;&lt;br&gt;según SLOW_WINDOW_MODE → N_slow(t)&lt;br&gt;value = media de los últimos N_slow precios" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="355" y="255" width="300" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-super" value="&lt;b&gt;3. super_slow_ma.update_raw(close, k = N_fast)&lt;/b&gt;&lt;br&gt;retardo iterado L niveles → N_super(t) ≈ 2&lt;sup&gt;L&lt;/sup&gt;·N_fast&lt;br&gt;value = media de los últimos N_super precios" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="355" y="340" width="300" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-note-order" value="&lt;b&gt;Las TRES se actualizan siempre&lt;/b&gt;, opere el par&lt;br&gt;que opere: así un solo CSV permite comparar&lt;br&gt;los tres emparejamientos offline.&lt;br&gt;&lt;br&gt;El orden importa: las dos lentas consumen la&lt;br&gt;ventana endógena que la rápida acaba de&lt;br&gt;calcular en esta misma barra (págs. 3, 5 y 6)" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="700" y="180" width="290" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-trace" value="&lt;b&gt;4. _trace_indicators(bar)&lt;/b&gt;&lt;br&gt;traza las tres MAs; diff = faster - slower&#160;&lt;i&gt;(par elegido)&lt;/i&gt;&lt;br&gt;trend = CROSSED_UP / CROSSED_DOWN / no_cross&lt;br&gt;(comparando con _prev_diff)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="355" y="425" width="300" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-row" value="&lt;b&gt;5. Fila de auditoría&lt;/b&gt; (_new_audit_row)&lt;br&gt;timestamp, bar_price, &lt;b&gt;pair&lt;/b&gt;,&lt;br&gt;fast_ma/n_fast/runs_fast,&lt;br&gt;slow_ma/n_slow/runs_slow,&lt;br&gt;super_slow_ma/n_super_slow/runs_super_slow,&lt;br&gt;ma_diff, trend, position, PnL… → _audit_rows" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="355" y="525" width="300" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-ready" value="¿faster_ma.initialized&lt;br&gt;&lt;b&gt;y&lt;/b&gt; slower_ma.initialized?&lt;br&gt;&lt;i&gt;(solo las dos patas del par)&lt;/i&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="1" vertex="1">
+                    <mxGeometry x="385" y="655" width="240" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-return" value="&lt;b&gt;return&lt;/b&gt;&lt;br&gt;(calentamiento: la fila queda registrada&lt;br&gt;con las tres MAs, no se opera. Una MA&lt;br&gt;ajena al par no frena la ejecución)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+                    <mxGeometry x="710" y="665" width="280" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-pos" value="net_position = portfolio.net_position(instrument)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+                    <mxGeometry x="355" y="790" width="300" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-buy" value="¿faster &gt; slower&lt;br&gt;y net_position ≤ 0?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="855" width="200" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-sell" value="¿faster &lt; slower&lt;br&gt;y net_position ≥ 0?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+                    <mxGeometry x="680" y="855" width="200" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-hold" value="Sin cambio&lt;br&gt;(ya posicionado en el&lt;br&gt;lado correcto)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+                    <mxGeometry x="410" y="845" width="190" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-revbuy" value="&lt;b&gt;_reverse_to(BUY, row)&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="965" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-revsell" value="&lt;b&gt;_reverse_to(SELL, row)&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+                    <mxGeometry x="680" y="965" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-revbox" value="&lt;b&gt;_reverse_to(side)  —  UNA sola orden de mercado&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontStyle=1;spacingTop=6" parent="1" vertex="1">
+                    <mxGeometry x="200" y="1050" width="620" height="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-r1" value="¿hay posición abierta en el lado contrario?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="330" y="1085" width="240" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-r2a" value="close_qty = |net_position|&lt;br&gt;redondeado a entero&lt;br&gt;&lt;i&gt;(IDEALPRO rechaza cantidades&lt;br&gt;fraccionarias)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="220" y="1180" width="220" height="75" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-r2b" value="close_qty = 0" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="1195" width="180" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-r3" value="&lt;b&gt;order_qty = close_qty + trade_size (20 000)&lt;/b&gt;&lt;br&gt;order_factory.market(side, order_qty) → submit_order&lt;br&gt;_pending_order_rows[client_order_id] = row&lt;br&gt;&lt;i&gt;Sin pre-check de caja: si falta saldo, IB rechaza&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="250" y="1275" width="520" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-ib" value="→ IB (TWS paper)&lt;br&gt;eventos de orden/posición: página 4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1" parent="1" vertex="1">
+                    <mxGeometry x="380" y="1370" width="260" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e1" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-bar" target="p2-fast" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e2" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-fast" target="p2-slow" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e2b" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-slow" target="p2-super" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e3" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-super" target="p2-trace" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e4" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-trace" target="p2-row" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e5" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-row" target="p2-ready" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e6" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-ready" target="p2-return" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e7" value="sí" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-ready" target="p2-pos" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e8" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-pos" target="p2-buy" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e9" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-pos" target="p2-sell" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e10" value="sí" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-buy" target="p2-revbuy" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e11" value="sí" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-sell" target="p2-revsell" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e12" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-buy" target="p2-hold" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e13" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-sell" target="p2-hold" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e14" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-revbuy" target="p2-r1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e15" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-revsell" target="p2-r1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e16" value="sí (reversión)" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-r1" target="p2-r2a" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e17" value="no (entrada limpia)" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-r1" target="p2-r2b" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e18" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-r2a" target="p2-r3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e19" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-r2b" target="p2-r3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2-e20" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p2-r3" target="p2-ib" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="page3" name="3. Ventana endógena N(t)">
+        <mxGraphModel dx="933" dy="618" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="1000" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p3-title" value="Medias móviles de ventana endógena — ninguna tiene parámetro de periodo" style="text;html=1;fontSize=18;fontStyle=1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="800" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-price" value="Serie de precios de cierre&lt;br&gt;p(t) — &lt;b&gt;Decimal&lt;/b&gt; (“plano” es exactamente plano)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="70" width="330" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-fastbox" value="&lt;b&gt;RunLengthMovingAverage&lt;/b&gt; (rápida)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;spacingTop=6" parent="1" vertex="1">
+                    <mxGeometry x="60" y="180" width="470" height="300" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-f1" value="d(t) = p(t) - p(t-1)  &lt;i&gt;(incremento crudo)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="220" width="390" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-f2" value="sign(d(t)) ∈ { +1, -1, 0 }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="285" width="390" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-f3" value="&lt;b&gt;RunLengthWindow&lt;/b&gt; → N_fast(t)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="345" width="390" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-f4" value="value = media de los últimos &lt;b&gt;N_fast&lt;/b&gt; PRECIOS&lt;br&gt;initialized cuando N_fast queda definida" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="405" width="390" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-slowbox" value="&lt;b&gt;SmoothedRunLengthMovingAverage&lt;/b&gt; (lenta)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontStyle=1;spacingTop=6" parent="1" vertex="1">
+                    <mxGeometry x="660" y="180" width="470" height="300" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-s1" value="k = N_fast(t)  &lt;i&gt;(la ventana de la rápida, no un parámetro)&lt;/i&gt;&lt;br&gt;s(t) = [p(t) - p(t-k)] / k  — momentum de k barras" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="215" width="390" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-s2" value="sign(s(t))  — filtro paso-bajo: solo cambia cuando&lt;br&gt;el movimiento sobre k barras cambia de dirección" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="285" width="390" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-s3" value="&lt;b&gt;RunLengthWindow&lt;/b&gt; → N_slow(t)  (rachas más largas)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="345" width="390" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-s4" value="value = media de los últimos &lt;b&gt;N_slow&lt;/b&gt; PRECIOS&lt;br&gt;&lt;i&gt;(precios, no incrementos: ambas MAs viven en&lt;br&gt;unidades de precio y el cruce tiene sentido)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="405" width="390" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-rlwbox" value="&lt;b&gt;RunLengthWindow.update(sign)&lt;/b&gt;  —  cómo nace N(t)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontStyle=1;spacingTop=6" parent="1" vertex="1">
+                    <mxGeometry x="180" y="540" width="840" height="330" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-w1" value="sign &gt; 0&lt;br&gt;cierra la racha bajista&lt;br&gt;run_up += 1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="220" y="590" width="220" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-w2" value="sign &lt; 0&lt;br&gt;cierra la racha alcista&lt;br&gt;run_down += 1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+                    <mxGeometry x="490" y="590" width="220" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-w3" value="sign = 0&lt;br&gt;cierra ambas rachas&lt;br&gt;no abre ninguna" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="590" width="220" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-w4" value="¿existen ya prev_run_up &lt;b&gt;y&lt;/b&gt; prev_run_down?  (ready)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="695" width="400" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-w5" value="&lt;b&gt;N(t) = run_up + run_down + prev_run_up + prev_run_down&lt;/b&gt;&lt;br&gt;N ≥ 2 · tope MAX_ENDOGENOUS_WINDOW = 4096" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="800" width="440" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-w6" value="N = 0&lt;br&gt;(aún indefinida:&lt;br&gt;calentando)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+                    <mxGeometry x="220" y="700" width="150" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-note" value="Idea: la ventana se estira mientras la racha&lt;br&gt;persiste y se contrae hacia la longitud de las&lt;br&gt;últimas rachas completadas cuando la dirección&lt;br&gt;se invierte. Ningún periodo fijado desde fuera." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#d6b656;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="850" y="695" width="250" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e1" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-price" target="p3-f1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e2" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-price" target="p3-s1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e3" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-f1" target="p3-f2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e4" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-f2" target="p3-f3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e5" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-f3" target="p3-f4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e6" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-s1" target="p3-s2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e7" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-s2" target="p3-s3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e8" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-s3" target="p3-s4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e9" value="k = N_fast" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;fontStyle=1;strokeColor=#d6b656;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" parent="1" source="p3-f3" target="p3-s1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e10" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p3-f3" target="p3-rlwbox" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e11" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p3-s3" target="p3-rlwbox" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e12" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-w1" target="p3-w4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e13" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-w2" target="p3-w4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e14" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-w3" target="p3-w4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e15" value="sí" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-w4" target="p3-w5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3-e16" value="no" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p3-w4" target="p3-w6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="page4" name="4. Eventos y parada">
+        <mxGraphModel dx="1133" dy="750" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p4-title" value="Ciclo de vida de órdenes/posiciones, auditoría y apagado" style="text;html=1;fontSize=18;fontStyle=1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="700" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-ib" value="&lt;b&gt;IB (TWS paper)&lt;/b&gt; devuelve eventos" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="70" width="260" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-filled" value="&lt;b&gt;on_order_filled&lt;/b&gt;&lt;br&gt;log side/qty/px/commission&lt;br&gt;quita la fila de _pending_order_rows" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="60" y="180" width="270" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-rejected" value="&lt;b&gt;on_order_rejected&lt;/b&gt;&lt;br&gt;¿había fila pendiente?&lt;br&gt;sí → row[&quot;reject_reason&quot;] = motivo&lt;br&gt;no → nueva fila de auditoría con el motivo&lt;br&gt;&lt;i&gt;(así se ve un rechazo por falta de fondos)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="380" y="180" width="330" height="105" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-canceled" value="&lt;b&gt;on_order_canceled&lt;/b&gt;&lt;br&gt;solo log" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="770" y="190" width="250" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-popen" value="&lt;b&gt;on_position_opened&lt;/b&gt;&lt;br&gt;side, qty, avg_px_open" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="60" y="330" width="270" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-pchanged" value="&lt;b&gt;on_position_changed&lt;/b&gt;&lt;br&gt;side, qty, realized/unrealized PnL" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="380" y="330" width="330" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-pclosed" value="&lt;b&gt;on_position_closed&lt;/b&gt;&lt;br&gt;_last_trade_pnl = realized_pnl&lt;br&gt;_cumulative_realized_pnl += realized_pnl&lt;br&gt;añade fila POSITION_CLOSED (avg_open/avg_close)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="760" y="320" width="290" height="85" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-rows" value="&lt;b&gt;_audit_rows&lt;/b&gt; (en memoria)&lt;br&gt;una fila por barra + filas por rechazo y por cierre de posición" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="450" width="300" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-hb" value="&lt;b&gt;_log_heartbeat&lt;/b&gt; cada 30 s&lt;br&gt;posición neta, unrealized/realized PnL,&lt;br&gt;estado de ambas MAs (valor y N, o “warming_up”),&lt;br&gt;balances de la cuenta" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=8;dashed=1" parent="1" vertex="1">
+                    <mxGeometry x="60" y="450" width="290" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-ctrlc" value="&lt;b&gt;Ctrl-C&lt;/b&gt;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="450" y="610" width="200" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-kbint" value="&lt;b&gt;except KeyboardInterrupt → node.stop()&lt;/b&gt;&lt;br&gt;&lt;i&gt;En Windows el manejador de señales de nautilus_trader&lt;br&gt;es un no-op (kernel._setup_loop() se salta), así que hay&lt;br&gt;que llamar a stop() explícitamente para que corra on_stop()&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=8" parent="1" vertex="1">
+                    <mxGeometry x="330" y="690" width="440" height="85" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-onstop" value="&lt;b&gt;Strategy.on_stop()&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="450" y="810" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-s1" value="1. clock.cancel_timer(heartbeat)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="890" width="230" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-s2" value="2. &lt;b&gt;_flatten_position()&lt;/b&gt;&lt;br&gt;orden de mercado por |posición| redondeada" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="880" width="260" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-s3" value="3. unsubscribe_bars(bar_type)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="630" y="890" width="230" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-s4" value="4. &lt;b&gt;_write_audit_csv()&lt;/b&gt;&lt;br&gt;audit/audit_&amp;lt;strategy_id&amp;gt;_&amp;lt;ts&amp;gt;.csv" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="880" y="880" width="200" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-dispose" value="&lt;b&gt;finally: node.dispose()&lt;/b&gt;  — desconexión limpia" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+                    <mxGeometry x="410" y="990" width="280" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e1" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-ib" target="p4-filled" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e2" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-ib" target="p4-rejected" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e3" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-ib" target="p4-canceled" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e4" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-filled" target="p4-popen" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e5" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-filled" target="p4-pchanged" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e6" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-filled" target="p4-pclosed" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e7" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p4-rejected" target="p4-rows" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e8" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p4-pclosed" target="p4-rows" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e9" value="filas de on_bar" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p4-hb" target="p4-rows" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e10" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-ctrlc" target="p4-kbint" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e11" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-kbint" target="p4-onstop" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e12" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-onstop" target="p4-s1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e13" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-onstop" target="p4-s2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e14" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-onstop" target="p4-s3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e15" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-onstop" target="p4-s4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e16" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p4-rows" target="p4-s4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e17" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-s2" target="p4-dispose" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4-e18" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p4-s4" target="p4-dispose" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="page5" name="5. Variante N_slow por auto-retardo">
+        <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p5-title" value="Dos construcciones para N_slow — SLOW_WINDOW_MODE" style="text;html=1;fontSize=18;fontStyle=1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="800" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-fast" value="&lt;b&gt;RunLengthMovingAverage&lt;/b&gt; (rápida) → &lt;b&gt;N_fast(t)&lt;/b&gt;&lt;br&gt;rachas de los incrementos crudos d(t)=p(t)-p(t-1)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="70" width="420" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-switch" value="SLOW_WINDOW_MODE" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="470" y="165" width="240" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-a" value="&lt;b&gt;&quot;smoothed_runs&quot;&lt;/b&gt; — construcción actual&lt;br&gt;SmoothedRunLengthMovingAverage" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontStyle=1;spacingTop=6" parent="1" vertex="1">
+                    <mxGeometry x="60" y="300" width="480" height="280" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-a1" value="k = N_fast(t)&lt;br&gt;s(t) = [p(t) - p(t-k)] / k" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="345" width="400" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-a2" value="sign(s(t)) → &lt;b&gt;segunda pasada de rachas&lt;/b&gt;&lt;br&gt;(RunLengthWindow sobre los signos suavizados)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="420" width="400" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-a3" value="&lt;b&gt;N_slow = run_up+run_down+prev_up+prev_down&lt;/b&gt;&lt;br&gt;&lt;i&gt;más lenta que la rápida solo en distribución,&lt;br&gt;no garantizado barra a barra&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="500" width="400" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-b" value="&lt;b&gt;&quot;lagged_fast&quot;&lt;/b&gt; — variante por auto-retardo&lt;br&gt;LaggedWindowMovingAverage" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontStyle=1;spacingTop=6" parent="1" vertex="1">
+                    <mxGeometry x="640" y="300" width="500" height="280" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-b1" value="historial de N_fast, un valor por barra&lt;br&gt;&lt;i&gt;(las barras de calentamiento entran como 0&lt;br&gt;para que el retardo se mida en barras)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="680" y="345" width="420" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-b2" value="retardo = N_fast(t)  →  hist[-1 - N_fast(t)]&lt;br&gt;&lt;i&gt;sin segunda pasada de rachas: O(1)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="680" y="430" width="420" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-b3" value="&lt;b&gt;N_slow(t) = N_fast(t) + N_fast(t - N_fast(t))&lt;/b&gt;&lt;br&gt;&lt;i&gt;N_fast ≥ 2 ⇒ N_slow ≥ N_fast + 2 &lt;b&gt;siempre&lt;/b&gt;&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="680" y="500" width="420" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-value" value="En ambos modos: &lt;b&gt;value = media de los últimos N_slow PRECIOS&lt;/b&gt;&lt;br&gt;(el cruce con la rápida sigue en unidades de precio)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="625" width="460" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-ex" value="&lt;b&gt;Ejemplo — historial N_fast: 8, 7, 6, 5, 6, 7, 5, 4&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontStyle=1;spacingTop=6" parent="1" vertex="1">
+                    <mxGeometry x="240" y="730" width="700" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-ex1" value="&lt;b&gt;barra actual&lt;/b&gt;  N_fast = 4&lt;br&gt;retrocedo 4 barras → N_fast era &lt;b&gt;5&lt;/b&gt;&lt;br&gt;&lt;b&gt;N_slow = 4 + 5 = 9&lt;/b&gt;" parent="1" vertex="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;align=left;spacingLeft=10">
+                    <mxGeometry x="280" y="775" width="290" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-ex2" value="&lt;b&gt;barra anterior&lt;/b&gt;  N_fast = 5&lt;br&gt;retrocedo 5 barras → N_fast era &lt;b&gt;7&lt;/b&gt;&lt;br&gt;&lt;b&gt;N_slow = 5 + 7 = 12&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="610" y="775" width="290" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-guards" value="&lt;b&gt;Guardas&lt;/b&gt;: se salta la barra si N_fast=0 (rápida calentando), si el historial no llega tan atrás,&lt;br&gt;si el valor retardado era 0 (indefinido entonces), o si N_slow supera los precios en buffer / 4096" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="280" y="875" width="620" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e1" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-fast" target="p5-switch" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e2" value="rachas suavizadas" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-switch" target="p5-a" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e3" value="auto-retardo" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-switch" target="p5-b" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e4" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-a1" target="p5-a2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e5" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-a2" target="p5-a3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e6" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-b1" target="p5-b2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e7" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-b2" target="p5-b3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e8" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-a3" target="p5-value" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e9" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p5-b3" target="p5-value" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5-e10" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p5-b3" target="p5-ex" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="page6" name="6. super_slow (retardo iterado)">
+        <mxGraphModel dx="933" dy="618" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="1000" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p6-title" value="&quot;super_slow&quot; — la misma regla iterada en cascada  (LaggedWindowMovingAverage, levels=L)" style="text;html=1;fontSize=18;fontStyle=1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1000" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-rule" value="&lt;b&gt;N&lt;sub&gt;L&lt;/sub&gt;(t) = N&lt;sub&gt;L-1&lt;/sub&gt;(t) + N&lt;sub&gt;L-1&lt;/sub&gt;( t - N&lt;sub&gt;L-1&lt;/sub&gt;(t) )&lt;/b&gt;   con N&lt;sub&gt;0&lt;/sub&gt; = N_fast&lt;br&gt;cada nivel lee &lt;u&gt;su propia&lt;/u&gt; serie del nivel de abajo, con su propio retardo en barras" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13" parent="1" vertex="1">
+                    <mxGeometry x="300" y="70" width="700" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-l0" value="&lt;b&gt;Nivel 0&lt;/b&gt;  N_fast(t)&lt;br&gt;rachas de los incrementos crudos" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="200" width="300" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-h0" value="historial nivel 0 (un valor por barra)" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;html=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11" parent="1" vertex="1">
+                    <mxGeometry x="440" y="190" width="170" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-l1" value="&lt;b&gt;Nivel 1&lt;/b&gt;  N₁ = N₀(t) + N₀(t-N₀(t))&lt;br&gt;≈ 2 × N_fast" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="320" width="300" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-h1" value="historial nivel 1" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;html=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11" parent="1" vertex="1">
+                    <mxGeometry x="440" y="315" width="170" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-l2" value="&lt;b&gt;Nivel 2&lt;/b&gt;  N₂ = N₁(t) + N₁(t-N₁(t))&lt;br&gt;≈ 4 × N_fast" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="440" width="300" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-h2" value="historial nivel 2" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;html=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11" parent="1" vertex="1">
+                    <mxGeometry x="440" y="435" width="170" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-ldots" value="⋮  (L niveles)" style="text;html=1;align=center;fontSize=16;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="510" width="300" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-lL" value="&lt;b&gt;Nivel L = N_slow&lt;/b&gt; ≈ 2&lt;sup&gt;L&lt;/sup&gt; × N_fast&lt;br&gt;acotado por MAX_ENDOGENOUS_WINDOW = 4096" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=0" parent="1" vertex="1">
+                    <mxGeometry x="80" y="560" width="300" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-val" value="value = media de los últimos &lt;b&gt;N_slow&lt;/b&gt; PRECIOS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="670" width="300" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-lag" value="&lt;b&gt;El retardo de cada nivel&lt;/b&gt;&lt;br&gt;&lt;br&gt;hist[-1]  = valor actual N&lt;sub&gt;L-1&lt;/sub&gt;(t)&lt;br&gt;hist[-1 - N&lt;sub&gt;L-1&lt;/sub&gt;(t)]  = el valor de hace N&lt;sub&gt;L-1&lt;/sub&gt;(t) barras&lt;br&gt;&lt;br&gt;Se anota &lt;b&gt;una entrada por barra en cada nivel&lt;/b&gt;,&lt;br&gt;incluidas las de calentamiento (valor 0), para&lt;br&gt;que el retardo siga midiéndose en barras y&lt;br&gt;los niveles no se desalineen entre sí." style="shape=note;whiteSpace=wrap;html=1;size=16;fillColor=#ffffff;strokeColor=#d6b656;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="660" y="190" width="330" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-guard" value="&lt;b&gt;Guardas por nivel&lt;/b&gt; (devuelven 0 = indefinido)&lt;br&gt;• el nivel de abajo aún vale 0&lt;br&gt;• el historial no llega N&lt;sub&gt;L-1&lt;/sub&gt;(t) barras atrás&lt;br&gt;• el valor retardado era 0 en aquel momento&lt;br&gt;• N_slow &gt; precios en buffer → se salta la barra" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;spacingLeft=10" parent="1" vertex="1">
+                    <mxGeometry x="660" y="430" width="330" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-meas" value="&lt;b&gt;Medido sobre 4 000 barras simuladas&lt;/b&gt; (N medio / barra en que inicializa)&lt;br&gt;&lt;br&gt;smoothed_runs           8.9       bar 9&lt;br&gt;lagged_fast (L=1)      7.7       bar 7&lt;br&gt;super_slow L=2        15.0      bar 12&lt;br&gt;super_slow L=3        29.6      bar 31&lt;br&gt;super_slow L=4        58.9      bar 59&lt;br&gt;super_slow L=5       117.5     bar 120&lt;br&gt;&lt;br&gt;&lt;i&gt;La ventana duplica por nivel — y el calentamiento también.&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=10;fontFamily=Courier New;fontSize=11" parent="1" vertex="1">
+                    <mxGeometry x="440" y="590" width="550" height="230" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-cfg" value="&lt;b&gt;SUPER_SLOW_LEVELS = 3&lt;/b&gt; &#8212; super_slow_ma es una MA propia, calculada en TODA barra (no un modo de SLOW_WINDOW_MODE)&lt;br&gt;La profundidad es un &lt;u&gt;número entero de niveles&lt;/u&gt;, no una longitud: sigue sin haber periodo exógeno.&lt;br&gt;Que llegue o no a operar lo decide &lt;b&gt;CROSSOVER_PAIR&lt;/b&gt; &#8212; página 7." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="850" width="910" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e1" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p6-l0" target="p6-l1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e2" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p6-l1" target="p6-l2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e3" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p6-l2" target="p6-lL" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e4" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p6-lL" target="p6-val" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e5" value="escribe" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p6-l0" target="p6-h0" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e6" value="lee con retardo N₀" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p6-h0" target="p6-l1" edge="1">
+                    <mxGeometry x="0.7333" y="50" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="p6-e7" value="escribe" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p6-l1" target="p6-h1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e8" value="lee con retardo N₁" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p6-h1" target="p6-l2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e9" value="escribe" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p6-l2" target="p6-h2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p6-e10" value="lee con retardo N₂" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p6-h2" target="p6-lL" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="page7" name="7. Tres MAs y par operado">
+        <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="1000" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p7-title" value="Tres MAs siempre calculadas &#8212; CROSSOVER_PAIR elige cu&#225;l par opera" style="text;html=1;fontSize=18;fontStyle=1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="900" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-bar" value="close de la barra (Decimal)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="510" y="70" width="280" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-fast" value="&lt;b&gt;fast_ma&lt;/b&gt;&lt;br&gt;RunLengthMovingAverage&lt;br&gt;rachas de los incrementos crudos&lt;br&gt;&#8594; &lt;b&gt;N_fast&lt;/b&gt;&#160; (&#8776; 4 en el test)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="170" width="330" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-slow" value="&lt;b&gt;slow_ma&lt;/b&gt;&#160; &#8212; SLOW_WINDOW_MODE&lt;br&gt;&quot;smoothed_runs&quot; (por defecto) &#183; &quot;lagged_fast&quot;&lt;br&gt;&#8594; &lt;b&gt;N_slow&lt;/b&gt;&#160; (&#8776; 9 en el test)&lt;br&gt;&lt;i&gt;p&#225;gina 5&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="1" vertex="1">
+                    <mxGeometry x="480" y="170" width="330" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-super" value="&lt;b&gt;super_slow_ma&lt;/b&gt;&#160; &#8212; SUPER_SLOW_LEVELS = L&lt;br&gt;retardo iterado L niveles&lt;br&gt;&#8594; &lt;b&gt;N_super&lt;/b&gt; &#8776; 2&lt;sup&gt;L&lt;/sup&gt;&#183;N_fast&#160; (&#8776; 30 con L=3)&lt;br&gt;&lt;i&gt;p&#225;gina 6&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="880" y="170" width="340" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-note" value="Las tres se actualizan en TODA barra, en este orden: las dos lentas consumen N_fast de la misma barra.&lt;br&gt;Las tres se escriben en el CSV de auditor&#237;a &#8212; por eso un solo run permite comparar los tres pares offline." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;dashed=1" parent="1" vertex="1">
+                    <mxGeometry x="80" y="290" width="1140" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-switch" value="&lt;b&gt;CROSSOVER_PAIR&lt;/b&gt;&lt;br&gt;(faster, slower)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="1" vertex="1">
+                    <mxGeometry x="530" y="390" width="240" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-p1" value="&lt;b&gt;&quot;fast_vs_slow&quot;&lt;/b&gt;&#160; &#8212; mecanismo en producci&#243;n&lt;br&gt;faster=fast_ma&#160; slower=slow_ma" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=3" parent="1" vertex="1">
+                    <mxGeometry x="60" y="545" width="370" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-p2" value="&lt;b&gt;&quot;fast_vs_super_slow&quot;&lt;/b&gt;&lt;br&gt;faster=fast_ma&#160; slower=super_slow_ma" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1" parent="1" vertex="1">
+                    <mxGeometry x="465" y="545" width="370" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-p3" value="&lt;b&gt;&quot;slow_vs_super_slow&quot;&lt;/b&gt;&lt;br&gt;faster=slow_ma&#160; slower=super_slow_ma" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1" parent="1" vertex="1">
+                    <mxGeometry x="870" y="545" width="370" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-gate" value="&lt;b&gt;Se&#241;al&lt;/b&gt;: faster &gt; slower &#8594; largo&#160;&#183;&#160; faster &lt; slower &#8594; corto&lt;br&gt;Solo se exige initialized en &lt;b&gt;las dos patas del par&lt;/b&gt;: una MA ajena&lt;br&gt;a&#250;n calentando se registra en el CSV pero no frena la ejecuci&#243;n." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="1" vertex="1">
+                    <mxGeometry x="330" y="660" width="640" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-meas" value="&lt;b&gt;Simulaci&#243;n sobre 4 000 barras&lt;/b&gt; (L=3, slow=smoothed_runs)&lt;br&gt;&lt;br&gt;par                                  1a se&#241;al    se&#241;ales&lt;br&gt;fast_vs_slow                    bar 15         604&lt;br&gt;fast_vs_super_slow        bar 41         252&lt;br&gt;slow_vs_super_slow       bar 41         196&lt;br&gt;&lt;br&gt;&lt;i&gt;Cuanto m&#225;s separadas las patas, menos se&#241;ales y m&#225;s tarde&lt;br&gt;la primera &#8212; menos comisiones, m&#225;s retardo de entrada.&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=10;fontFamily=Courier New;fontSize=11" parent="1" vertex="1">
+                    <mxGeometry x="330" y="775" width="640" height="185" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e1" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p7-bar" target="p7-fast" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e2" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p7-bar" target="p7-slow" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e3" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p7-bar" target="p7-super" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e4" value="k = N_fast" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#d6b656;fontStyle=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" parent="1" source="p7-fast" target="p7-slow" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e5" value="k = N_fast" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#d6b656;fontStyle=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" parent="1" source="p7-slow" target="p7-super" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e6" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p7-note" target="p7-switch" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e7" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;" parent="1" source="p7-switch" target="p7-p1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e8" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p7-switch" target="p7-p2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e9" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p7-switch" target="p7-p3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e10" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="p7-p1" target="p7-gate" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e11" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p7-p2" target="p7-gate" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e12" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p7-p3" target="p7-gate" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p7-e13" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;" parent="1" source="p7-gate" target="p7-meas" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

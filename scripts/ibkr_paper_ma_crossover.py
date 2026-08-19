@@ -1,7 +1,16 @@
-# aún no he hecho el commit push 
-# drawio? 
+# pedir un reminder de dóne estamos
+# posible indicador de switch para fast+slow (A) - fast+superSlow (B) - slow-superSlow (C)
+# cada una genera un bº en tendencia (el opuesto es reversión)
+# tendremos 3 series de bº. Según sea una u otra >0 se hace el swithc
+# >0 es delsde el último cruce slow vs SuperSlow (punto común de inicio acumular bº como indicador)
+# otro criterio: segmentar estados: min(A, B, C) > 0; max(A, B, C) < 0; 
+# A > 0 & B < 0 & C < 0; A < 0 & B > 0 & C < 0; A < 0 & B < 0 & C > 0
+# en qué estado gana dinero A, B o C? (o ninguno) (o todos)
+# otra opción: los bºs pueden ser desde ese trade (A, B, C tienen distintas duraciones) (punto no común)
+
 # probar barras 15 min con las mm endógenas actuales
-# ver si hallo mecanismo de endogeneización para N mucho mayor
+# test fast vs slow y fast vs superSlow y slow vs superSlow
+# para el test, meter datos de fuera (minuto? día? Hora?)
 
 """
 Minimal paper-trading test: SMA crossover strategy on Interactive Brokers (TWS/IB Gateway).
@@ -98,10 +107,37 @@ BAR_AGGREGATION_SOURCE = "INTERNAL"  # "EXTERNAL" = IB's native real-time bars
                                      # "INTERNAL" = Nautilus builds bars locally from
                                      #   quote ticks — required for any other step
                                      #   (e.g. "1-SECOND", "10-SECOND", "20-SECOND")
-# Neither MA has a period parameter: both windows are derived from the
-# series' own run dynamics. The fast MA reads the runs of the raw increments
-# (RunLengthMovingAverage); the slow MA reads the runs of the moving average
-# of those increments (SmoothedRunLengthMovingAverage).
+# THREE moving averages are computed on every bar, none of them with a period
+# parameter: every window is endogenous, derived from the series' own run
+# dynamics. The fast one reads the runs of the raw increments
+# (RunLengthMovingAverage); the other two are built on top of its window.
+#
+#   fast        N_fast, run lengths of the raw increments
+#   slow        N_slow, per SLOW_WINDOW_MODE below
+#   super_slow  N_super ~ 2^L * N_fast, the lagged rule iterated L levels
+#
+SLOW_WINDOW_MODE = "smoothed_runs"   # How the SLOW MA derives its window:
+# "smoothed_runs" -> SmoothedRunLengthMovingAverage: a second run-length pass,
+#                    run on the moving average of the increments over the fast
+#                    MA's own window.
+# "lagged_fast"   -> LaggedWindowMovingAverage(levels=1): no second run-length
+#                    pass at all, N_slow(t) = N_fast(t) + N_fast(t - N_fast(t)).
+
+SUPER_SLOW_LEVELS = 3            # Depth of the SUPER_SLOW MA: the lagged rule
+                                 # iterated L times, each level reading the one
+                                 # below it. Depth is an integer count of
+                                 # levels, not a length, so no exogenous period
+                                 # sneaks back in. Each level roughly doubles
+                                 # the window (3 levels ~ 8x the fast one) and
+                                 # warm-up grows on the same 2^L scale.
+
+# Which pair actually trades. All three MAs are computed and written to the
+# audit CSV regardless, so one run's CSV supports comparing every pairing
+# offline; this only decides which crossover submits orders live.
+CROSSOVER_PAIR = "fast_vs_slow"
+# "fast_vs_slow"        -> the live mechanism
+# "fast_vs_super_slow"  -> widest separation, fewest signals
+# "slow_vs_super_slow"  -> both legs smoothed, no raw-increment leg
 TRADE_SIZE = Decimal(20000)      # Target position size (FX base currency units;
                                  # IDEALPRO's typical minimum is 20,000). This is
                                  # the size the strategy holds after an entry; a
@@ -334,22 +370,175 @@ class SmoothedRunLengthMovingAverage:
         return self.runs.state_repr()
 
 
+class LaggedWindowMovingAverage:
+    """
+    Slow MA, alternative construction: the window is read straight off a
+    window history, with no second run-length pass.
+
+    One level (`levels=1`) applies the rule to the fast MA's own history:
+
+        N_1(t) = N_fast(t) + N_fast(t - N_fast(t))
+
+    Take the window as it stands now, look back exactly that many bars, and
+    add whatever the window was at that point.
+
+    Example - N_fast history 8, 7, 6, 5, 6, 7, 5, 4 (last value = now):
+        now    : N_fast = 4, four bars back N_fast was 5  ->  N_1 = 9
+        prev   : N_fast = 5, five bars back N_fast was 7  ->  N_1 = 12
+
+    With `levels=L` the same rule is iterated, each level reading the level
+    below it (level 0 being the fast MA itself):
+
+        N_L(t) = N_{L-1}(t) + N_{L-1}(t - N_{L-1}(t))
+
+    Every level keeps its own per-bar history, so the lag at level L is that
+    level's own current window, measured in bars. The final window is the
+    top level's value.
+
+    Properties worth being explicit about:
+
+    1. Every defined window is >= 2, so N_L(t) >= N_{L-1}(t) + 2 whenever it
+       is defined: each level is strictly slower than the one below it, in
+       every bar, not just on average.
+    2. Each level roughly DOUBLES the window (it adds a past value of the
+       same series to the current one), so N_L ~ 2^L * N_fast. This is the
+       mechanism for reaching a much larger N without ever fixing a period:
+       the extra depth is an integer count of levels, not a length.
+    3. The price of that depth is warm-up. Level L cannot resolve until its
+       lookback lands on a bar where level L-1 was already defined, so the
+       bars needed before the MA initializes also grow like 2^L * N_fast.
+    4. The lag IS the current window at every level, so the memory still
+       scales with the series' own run structure rather than a constant.
+
+    Base series : N_fast(t), one value per bar (0 while the fast MA is still
+                  warming up - those bars are recorded so the lag stays
+                  measured in bars, but are never used as a lagged value)
+    Window      : N_L(t) per the recursion above, capped at
+                  MAX_ENDOGENOUS_WINDOW
+    Value       : mean of the last N_L(t) PRICES, ending at t - same as the
+                  other MAs, so the crossover stays in price units.
+    """
+
+    def __init__(self, levels: int = 1) -> None:
+        if levels < 1:
+            raise ValueError(f"levels must be >= 1, got {levels}")
+
+        self.levels = levels
+        self._prices: deque[Decimal] = deque(maxlen=MAX_ENDOGENOUS_WINDOW)
+        # One history per level, level 0 being the fast MA's own window.
+        # Each is one slot longer than the largest reachable lag: a lookup
+        # needs N(t) plus the entry N(t) bars before it.
+        self._histories: list[deque[int]] = [
+            deque(maxlen=MAX_ENDOGENOUS_WINDOW + 1) for _ in range(levels + 1)
+        ]
+
+        self.count = 0
+        self.value = 0.0
+        self.initialized = False
+        self.period = 0
+        self.chain: list[int] = [0] * (levels + 1)  # Per-level window, for tracing
+
+    @staticmethod
+    def _next_level(history: deque[int]) -> int:
+        """
+        Apply the rule once to `history` (which already includes the current
+        bar). Returns 0 when the level is still undefined.
+        """
+        current = history[-1]
+        if current <= 0 or len(history) <= current:
+            return 0  # Level below undefined, or history does not reach back
+
+        # Index -1 is the current bar, so t - N(t) sits at -1 - N(t).
+        lagged = history[-1 - current]
+        if lagged <= 0:
+            return 0  # The window was still undefined that far back
+
+        return min(current + lagged, MAX_ENDOGENOUS_WINDOW)
+
+    def update_raw(self, price: Decimal, increment_window: int) -> None:
+        """
+        Feed one price plus the fast MA's current window N_fast(t). Every bar
+        appends one entry to every level, including the warm-up bars where a
+        level is still 0, so all lags stay measured in bars.
+        """
+        self._prices.append(price)
+        self.count += 1
+
+        self._histories[0].append(increment_window)
+        self.chain[0] = increment_window
+        for level in range(1, self.levels + 1):
+            n = self._next_level(self._histories[level - 1])
+            self._histories[level].append(n)
+            self.chain[level] = n
+
+        n = self.chain[self.levels]
+        if n <= 0 or n > len(self._prices):
+            return  # Top level undefined, or not enough prices to average yet
+
+        self.period = n
+        window = list(self._prices)[-n:]
+        self.value = float(sum(window) / n)
+        self.initialized = True
+
+    def state_repr(self) -> str:
+        chain = " -> ".join(
+            f"N_fast={n}" if level == 0 else f"L{level}={n}"
+            for level, n in enumerate(self.chain)
+        )
+        return f"{chain} N={self.period}"
+
+
+SLOW_MA_BUILDERS = {
+    "smoothed_runs": lambda config: SmoothedRunLengthMovingAverage(),
+    "lagged_fast": lambda config: LaggedWindowMovingAverage(levels=1),
+}
+
+# Which two of the three MAs the crossover trades. The first name is the
+# faster leg, the second the slower one: the strategy goes long when the
+# faster leg sits above the slower one and short when it sits below.
+# All three MAs are computed and audited on every bar regardless, so a single
+# run's CSV supports comparing all three pairings offline.
+CROSSOVER_PAIRS = {
+    "fast_vs_slow": ("fast_ma", "slow_ma"),
+    "fast_vs_super_slow": ("fast_ma", "super_slow_ma"),
+    "slow_vs_super_slow": ("slow_ma", "super_slow_ma"),
+}
+
+MA_LABELS = {"fast_ma": "fast", "slow_ma": "slow", "super_slow_ma": "super_slow"}
+
+
 class MACrossoverConfig(StrategyConfig, frozen=True):
     instrument_id: InstrumentId
     bar_type: BarType
     trade_size: Decimal = Decimal(10)
     heartbeat_interval_seconds: int = 30
+    slow_window_mode: str = "smoothed_runs"
+    super_slow_levels: int = 3
+    crossover_pair: str = "fast_vs_slow"
 
 
 class MACrossoverStrategy(Strategy):
     """
-    Minimal moving-average crossover strategy:
-      - Fast MA crosses above slow MA  -> go long
-      - Fast MA crosses below slow MA  -> go short
+    Moving-average crossover strategy over three endogenous-window MAs.
 
-    Neither MA has a period parameter: both windows are endogenous, derived
-    from the series' own run dynamics. The fast MA runs on the raw
-    increments, the slow MA on the moving average of those increments.
+    Three MAs are maintained on every bar:
+      fast_ma        run lengths of the raw increments               -> N_fast
+      slow_ma        `slow_window_mode`, built on top of N_fast      -> N_slow
+      super_slow_ma  the lagged rule iterated `super_slow_levels`
+                     times, so N ~ 2^L * N_fast                      -> N_super
+
+    `crossover_pair` picks which two of them actually trade:
+      "fast_vs_slow"        (default - the live mechanism)
+      "fast_vs_super_slow"
+      "slow_vs_super_slow"
+
+    The strategy goes long when the pair's faster leg is above its slower leg
+    and short when it is below. All three MAs are traced and written to the
+    audit CSV whichever pair is selected, so one run supports comparing all
+    three pairings offline.
+
+    No MA has a period parameter: every window is endogenous, derived from
+    the series' own run dynamics.
 
     A reversal is sent as one market order (close + entry combined), so
     only one commission is paid per direction change.
@@ -358,12 +547,28 @@ class MACrossoverStrategy(Strategy):
     def __init__(self, config: MACrossoverConfig) -> None:
         super().__init__(config)
 
+        slow_ma_builder = SLOW_MA_BUILDERS.get(config.slow_window_mode)
+        if slow_ma_builder is None:
+            raise ValueError(
+                f"Unknown slow_window_mode {config.slow_window_mode!r}, "
+                f"expected one of {sorted(SLOW_MA_BUILDERS)}",
+            )
+        pair = CROSSOVER_PAIRS.get(config.crossover_pair)
+        if pair is None:
+            raise ValueError(
+                f"Unknown crossover_pair {config.crossover_pair!r}, "
+                f"expected one of {sorted(CROSSOVER_PAIRS)}",
+            )
+
         self.fast_ma = RunLengthMovingAverage()
-        self.slow_ma = SmoothedRunLengthMovingAverage()
+        self.slow_ma = slow_ma_builder(config)
+        self.super_slow_ma = LaggedWindowMovingAverage(levels=config.super_slow_levels)
         self.trade_size = Quantity.from_str(str(config.trade_size))
 
-        self._fast_ma_ready_logged = False
-        self._slow_ma_ready_logged = False
+        # The two legs that actually trade, resolved once at construction.
+        self._faster_name, self._slower_name = pair
+
+        self._ready_logged: set[str] = set()
         self._prev_diff: float | None = None
 
         self._audit_rows: list[dict] = []
@@ -394,7 +599,9 @@ class MACrossoverStrategy(Strategy):
             f"Started | instrument={self.config.instrument_id} "
             f"bar_type={self.config.bar_type} "
             f"fast_ma=endogenous(increment runs) "
-            f"slow_ma=endogenous(smoothed-increment runs) "
+            f"slow_ma=endogenous({self.config.slow_window_mode}) "
+            f"super_slow_ma=endogenous(lagged x{self.super_slow_ma.levels}) "
+            f"trading={self.config.crossover_pair} "
             f"trade_size={self.trade_size} audit_file={self._audit_file_path}",
         )
 
@@ -414,54 +621,54 @@ class MACrossoverStrategy(Strategy):
         account = self.portfolio.account(IB_VENUE)
         balances = account.balances_total() if account is not None else {}
 
-        fast_repr = (
-            f"{self.fast_ma.value:.4f}(N={self.fast_ma.period})"
-            if self.fast_ma.initialized
-            else f"warming_up({self.fast_ma.count} bars, {self.fast_ma.state_repr()})"
+        reprs = " ".join(
+            f"{name}={self._ma_repr(name, verbose=True)}" for name in MA_LABELS
         )
-        slow_repr = (
-            f"{self.slow_ma.value:.4f}(N={self.slow_ma.period})"
-            if self.slow_ma.initialized
-            else f"warming_up({self.slow_ma.count} bars, {self.slow_ma.state_repr()})"
-        )
-
         self.log.info(
             f"[HEARTBEAT] position={net_position} "
             f"unrealized_pnl={unrealized_pnl} realized_pnl={realized_pnl} "
-            f"fast_ma={fast_repr} slow_ma={slow_repr} balances={balances}",
+            f"trading={self.config.crossover_pair} {reprs} balances={balances}",
         )
 
+    @property
+    def faster_ma(self):
+        """The traded pair's faster leg."""
+        return getattr(self, self._faster_name)
+
+    @property
+    def slower_ma(self):
+        """The traded pair's slower leg."""
+        return getattr(self, self._slower_name)
+
+    def _ma_repr(self, name: str, verbose: bool = False) -> str:
+        ma = getattr(self, name)
+        if ma.initialized:
+            return f"{ma.value:.4f}(N={ma.period})"
+        if verbose:
+            return f"warming_up({ma.count} bars, {ma.state_repr()})"
+        return "warming_up"
+
     def _trace_indicators(self, bar: Bar) -> tuple[float, str] | tuple[None, None]:
-        if not self.fast_ma.initialized:
-            self.log.debug(
-                f"[INDICATOR] fast_ma warming up: {self.fast_ma.count} bars received, "
-                f"waiting for one completed run of each sign - "
-                f"{self.fast_ma.state_repr()} (last close={bar.close})",
-            )
-        elif not self._fast_ma_ready_logged:
-            self.log.info(
-                f"[INDICATOR] fast_ma initialized with endogenous window "
-                f"N={self.fast_ma.period} value={self.fast_ma.value:.4f}",
-            )
-            self._fast_ma_ready_logged = True
+        # Trace all three MAs, not just the traded pair: the whole point of
+        # computing them together is being able to compare pairings offline.
+        for name in MA_LABELS:
+            ma = getattr(self, name)
+            if not ma.initialized:
+                self.log.debug(
+                    f"[INDICATOR] {name} warming up: {ma.count} bars received, "
+                    f"N still undefined - {ma.state_repr()} (last close={bar.close})",
+                )
+            elif name not in self._ready_logged:
+                self.log.info(
+                    f"[INDICATOR] {name} initialized with endogenous window "
+                    f"N={ma.period} value={ma.value:.4f}",
+                )
+                self._ready_logged.add(name)
 
-        if not self.slow_ma.initialized:
-            self.log.debug(
-                f"[INDICATOR] slow_ma warming up: {self.slow_ma.count} bars received, "
-                f"waiting for one completed run of each sign on the smoothed "
-                f"increments - {self.slow_ma.state_repr()} (last close={bar.close})",
-            )
-        elif not self._slow_ma_ready_logged:
-            self.log.info(
-                f"[INDICATOR] slow_ma initialized with endogenous window "
-                f"N={self.slow_ma.period} value={self.slow_ma.value:.4f}",
-            )
-            self._slow_ma_ready_logged = True
-
-        if not (self.fast_ma.initialized and self.slow_ma.initialized):
+        if not (self.faster_ma.initialized and self.slower_ma.initialized):
             return None, None
 
-        diff = self.fast_ma.value - self.slow_ma.value
+        diff = self.faster_ma.value - self.slower_ma.value
         trend = "no_cross"
         if self._prev_diff is not None:
             if self._prev_diff <= 0 < diff:
@@ -469,10 +676,16 @@ class MACrossoverStrategy(Strategy):
             elif self._prev_diff >= 0 > diff:
                 trend = "CROSSED_DOWN"
 
+        others = " ".join(
+            f"{name}={self._ma_repr(name)}"
+            for name in MA_LABELS
+            if name not in (self._faster_name, self._slower_name)
+        )
         self.log.info(
-            f"[INDICATOR] bar_close={bar.close} fast_ma={self.fast_ma.value:.4f} "
-            f"(N={self.fast_ma.period}) slow_ma={self.slow_ma.value:.4f} "
-            f"(N={self.slow_ma.period}) diff={diff:.4f} trend={trend}",
+            f"[INDICATOR] bar_close={bar.close} "
+            f"{self._faster_name}={self.faster_ma.value:.4f}(N={self.faster_ma.period}) "
+            f"{self._slower_name}={self.slower_ma.value:.4f}(N={self.slower_ma.period}) "
+            f"diff={diff:.4f} trend={trend} | untraded: {others}",
         )
         self._prev_diff = diff
         return diff, trend
@@ -487,12 +700,16 @@ class MACrossoverStrategy(Strategy):
         return {
             "timestamp": timestamp,
             "bar_price": "",
-            "short_ma": "",
+            "pair": self.config.crossover_pair,
+            "fast_ma": "",
             "n_fast": "",
             "runs_fast": "",
-            "long_ma": "",
+            "slow_ma": "",
             "n_slow": "",
             "runs_slow": "",
+            "super_slow_ma": "",
+            "n_super_slow": "",
+            "runs_super_slow": "",
             "ma_diff": "",
             "trend": "",
             "trade": "",
@@ -505,38 +722,50 @@ class MACrossoverStrategy(Strategy):
         }
 
     def on_bar(self, bar: Bar) -> None:
-        # Both MAs are updated by hand, fast first: the slow MA averages the
-        # increments over the fast MA's current endogenous window.
+        # All three MAs are updated by hand, fast first: both slower ones are
+        # built on the fast MA's endogenous window from this same bar. They
+        # are updated whichever pair trades, so the audit CSV always carries
+        # the full picture.
         close = bar.close.as_decimal()
         self.fast_ma.update_raw(close)
         self.slow_ma.update_raw(close, self.fast_ma.period)
+        self.super_slow_ma.update_raw(close, self.fast_ma.period)
 
         diff, trend = self._trace_indicators(bar)
 
         row = self._new_audit_row(unix_nanos_to_dt(bar.ts_event).isoformat())
         row["bar_price"] = str(bar.close)
-        row["short_ma"] = f"{self.fast_ma.value:.5f}" if self.fast_ma.initialized else ""
-        row["n_fast"] = str(self.fast_ma.period) if self.fast_ma.initialized else ""
-        row["runs_fast"] = self.fast_ma.state_repr()
-        row["long_ma"] = f"{self.slow_ma.value:.5f}" if self.slow_ma.initialized else ""
-        row["n_slow"] = str(self.slow_ma.period) if self.slow_ma.initialized else ""
-        row["runs_slow"] = self.slow_ma.state_repr()
+        for name, prefix in (
+            ("fast_ma", "fast"),
+            ("slow_ma", "slow"),
+            ("super_slow_ma", "super_slow"),
+        ):
+            ma = getattr(self, name)
+            row[name] = f"{ma.value:.5f}" if ma.initialized else ""
+            row[f"n_{prefix}"] = str(ma.period) if ma.initialized else ""
+            row[f"runs_{prefix}"] = ma.state_repr()
         row["ma_diff"] = f"{diff:.5f}" if diff is not None else ""
         row["trend"] = trend or ""
         self._audit_rows.append(row)
 
-        if not self.fast_ma.initialized or not self.slow_ma.initialized:
+        # Only the traded pair gates execution; a slower MA still warming up
+        # is written to the CSV but does not hold up an unrelated pairing.
+        if not (self.faster_ma.initialized and self.slower_ma.initialized):
             return
 
-        fast = self.fast_ma.value
-        slow = self.slow_ma.value
+        faster = self.faster_ma.value
+        slower = self.slower_ma.value
         net_position = self.portfolio.net_position(self.config.instrument_id)
 
-        if fast > slow and net_position <= 0:
-            self.log.info("Fast MA crossed above slow MA -> BUY")
+        if faster > slower and net_position <= 0:
+            self.log.info(
+                f"{self._faster_name} crossed above {self._slower_name} -> BUY",
+            )
             self._reverse_to(OrderSide.BUY, row)
-        elif fast < slow and net_position >= 0:
-            self.log.info("Fast MA crossed below slow MA -> SELL")
+        elif faster < slower and net_position >= 0:
+            self.log.info(
+                f"{self._faster_name} crossed below {self._slower_name} -> SELL",
+            )
             self._reverse_to(OrderSide.SELL, row)
 
     def _closable_quantity(self) -> Decimal:
@@ -626,12 +855,16 @@ class MACrossoverStrategy(Strategy):
         fieldnames = [
             "timestamp",
             "bar_price",
-            "short_ma",
+            "pair",
+            "fast_ma",
             "n_fast",
             "runs_fast",
-            "long_ma",
+            "slow_ma",
             "n_slow",
             "runs_slow",
+            "super_slow_ma",
+            "n_super_slow",
+            "runs_super_slow",
             "ma_diff",
             "trend",
             "trade",
@@ -762,6 +995,9 @@ def main() -> None:
         bar_type=bar_type,
         trade_size=TRADE_SIZE,
         heartbeat_interval_seconds=HEARTBEAT_INTERVAL_SECONDS,
+        slow_window_mode=SLOW_WINDOW_MODE,
+        super_slow_levels=SUPER_SLOW_LEVELS,
+        crossover_pair=CROSSOVER_PAIR,
     )
     strategy = MACrossoverStrategy(config=strategy_config)
 
