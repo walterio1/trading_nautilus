@@ -1,16 +1,5 @@
-# pedir un reminder de dóne estamos
-# posible indicador de switch para fast+slow (A) - fast+superSlow (B) - slow-superSlow (C)
-# cada una genera un bº en tendencia (el opuesto es reversión)
-# tendremos 3 series de bº. Según sea una u otra >0 se hace el swithc
-# >0 es delsde el último cruce slow vs SuperSlow (punto común de inicio acumular bº como indicador)
-# otro criterio: segmentar estados: min(A, B, C) > 0; max(A, B, C) < 0; 
-# A > 0 & B < 0 & C < 0; A < 0 & B > 0 & C < 0; A < 0 & B < 0 & C > 0
-# en qué estado gana dinero A, B o C? (o ninguno) (o todos)
-# otra opción: los bºs pueden ser desde ese trade (A, B, C tienen distintas duraciones) (punto no común)
-
-# probar barras 15 min con las mm endógenas actuales
-# test fast vs slow y fast vs superSlow y slow vs superSlow
-# para el test, meter datos de fuera (minuto? día? Hora?)
+# ratio de varianza como régimen
+# como tratar el salto de día (fin de semana): compra o venta al cierre del vie, deshacer inicio semana
 
 """
 Minimal paper-trading test: SMA crossover strategy on Interactive Brokers (TWS/IB Gateway).
