@@ -33,11 +33,13 @@ Run
 
 import argparse
 import statistics
+from collections import Counter, defaultdict
 from datetime import datetime
 
 COST_PCT = 0.00455          # one tick round trip at EUR/USD 1.10
 ENTRY_HORIZONS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360]
 EXIT_HORIZONS = [0, 15, 30, 60, 120, 240, 480, 960, 1440, 2880]
+N_FOLDS = 10
 
 
 def parse_args() -> argparse.Namespace:
@@ -91,6 +93,160 @@ def stats(values: list[float]) -> tuple[float, float]:
     mean = statistics.mean(values)
     sd = statistics.stdev(values)
     return mean, (mean / (sd / len(values) ** 0.5)) if sd else 0.0
+
+
+def cost_by_year(rows: list[tuple]) -> dict[int, float]:
+    """
+    Real one-tick cost per year, percent of notional, from the series' own grid.
+
+    The smallest close-to-close increment repeating in at least 1% of bars is
+    the tick in adjusted units; dividing by the mean adjusted price cancels the
+    ratio-adjustment factor. Same measure as loto_e6.py. It matters here
+    because E6's effective tick halved in 2016: a fixed 0.00455% understates
+    2008-2015 by 1.5-2x and overstates 2017-2025 slightly.
+    """
+    inc, pre = defaultdict(list), defaultdict(list)
+    for i in range(1, len(rows)):
+        y = rows[i][0].year
+        if y == rows[i - 1][0].year:
+            d = abs(rows[i][2] - rows[i - 1][2])
+            if d > 0:
+                inc[y].append(round(d, 7))
+        pre[y].append(rows[i][2])
+    out = {}
+    for y, ds in inc.items():
+        cand = sorted(v for v, k in Counter(ds).items() if k >= 0.01 * len(ds))
+        out[y] = 100.0 * (cand[0] if cand else min(ds)) / (sum(pre[y]) / len(pre[y]))
+    return out
+
+
+def weekend_net(rec: dict, window: int, direction: int, cost: dict[int, float]) -> float | None:
+    """
+    Net percent for one weekend under (window, direction), or None if no trade.
+
+    direction -1 fades the Friday move, +1 follows it. A Friday window with no
+    move at all carries no signal, so it is not traded and pays no cost.
+    """
+    move = rec[f"pre{window}"]
+    if move == 0:
+        return None
+    return direction * (1 if move > 0 else -1) * rec["gap"] - cost[rec["date"].year]
+
+
+def validate(records: list[dict], cost: dict[int, float]) -> None:
+    """
+    Choose the entry window AND the direction without looking at the weekends
+    they are scored on, two ways:
+
+      LOTO       10 blocks; each block is traded with the rule chosen on the
+                 other nine. Close to out-of-sample, with a small look-ahead:
+                 the training set includes weekends after the tested block.
+      EXPANDING  train on 0-50%, trade 50-60%; train on 0-60%, trade 60-70%...
+                 Strictly out-of-sample, no weekend after the tested block used.
+
+    The direction is free too, because "fade" was itself found by looking at
+    the whole sample. Two in-sample objectives, since picking the objective is
+    one more choice the procedure does not validate.
+    """
+    rules = [(w, d) for w in ENTRY_HORIZONS for d in (-1, 1)]
+    n = len(records)
+    edges = [n * k // N_FOLDS for k in range(N_FOLDS + 1)]
+    years = (records[-1]["date"] - records[0]["date"]).days / 365.25
+
+    def scored(idx, rule):
+        return [x for x in (weekend_net(records[i], rule[0], rule[1], cost) for i in idx)
+                if x is not None]
+
+    def choose(train_idx, objective):
+        best, best_score = None, None
+        for rule in rules:
+            v = scored(train_idx, rule)
+            if len(v) < 50:
+                continue
+            if objective == "net_total":
+                score = sum(v)
+            else:
+                sd = statistics.stdev(v)
+                score = statistics.mean(v) / (sd / len(v) ** 0.5) if sd else 0.0
+            if best_score is None or score > best_score:
+                best, best_score = rule, score
+        return best
+
+    def label(rule):
+        return f"{'fade' if rule[1] == -1 else 'follow'} {rule[0]} min"
+
+    fixed = [x for x in (weekend_net(r, 15, -1, cost) for r in records) if x is not None]
+    mf, tf = stats(fixed)
+    half = len(fixed) // 2
+    print(f"\nCONFIRMATION with the real cost per year (fade 15 min, exit at the open, "
+          f"no trade when Friday did not move):")
+    print(f"  {len(fixed)} trades, {mf:+.5f}% per weekend, t {tf:+.2f}, "
+          f"total {sum(fixed):+.2f}% = {sum(fixed) / years:+.3f}%/year, "
+          f"halves {sum(fixed[:half]):+.2f}% / {sum(fixed[half:]):+.2f}%")
+
+    yearly: dict[str, dict[int, list[float]]] = {}
+    for objective in ("net_total", "t"):
+        print(f"\nLOTO - window and direction chosen on the other 90%, objective = {objective}")
+        print(f"  {'fold':<6}{'dates':<25}{'chosen':<18}{'trades':>7}{'net %':>9}")
+        total, trades, positive, chosen, oos = 0.0, 0, 0, [], {}
+        for f in range(N_FOLDS):
+            test = range(edges[f], edges[f + 1])
+            train = [i for i in range(n) if i < edges[f] or i >= edges[f + 1]]
+            rule = choose(train, objective)
+            v = scored(test, rule)
+            total += sum(v)
+            trades += len(v)
+            positive += sum(v) > 0
+            chosen.append(rule)
+            for i in test:
+                x = weekend_net(records[i], rule[0], rule[1], cost)
+                if x is not None:
+                    oos.setdefault(records[i]["date"].year, []).append(x)
+            dates = f"{records[edges[f]]['date']:%Y-%m}..{records[edges[f + 1] - 1]['date']:%Y-%m}"
+            print(f"  {f + 1:<6}{dates:<25}{label(rule):<18}{len(v):>7}{sum(v):>+9.2f}")
+        yearly[objective] = oos
+        yp = sum(1 for y in oos if sum(oos[y]) > 0)
+        print(f"  LOTO: {total:+.2f}% over {years:.1f} years = {total / years:+.3f}%/year, "
+              f"{trades} trades, {total / trades:+.5f}% per trade, {positive}/{N_FOLDS} folds "
+              f"positive, {yp}/{len(oos)} years positive")
+        print("  chosen: " + " · ".join(f"{c}/{N_FOLDS} {label(r)}"
+                                         for r, c in Counter(chosen).most_common()))
+
+        total, positive, picks = 0.0, 0, []
+        for k in range(N_FOLDS // 2, N_FOLDS):
+            rule = choose(range(edges[k]), objective)
+            v = scored(range(edges[k], edges[k + 1]), rule)
+            total += sum(v)
+            positive += sum(v) > 0
+            picks.append(f"{label(rule)} {sum(v):+.2f}%")
+        span = (records[-1]["date"] - records[edges[N_FOLDS // 2]]["date"]).days / 365.25
+        print(f"  EXPANDING window (stricter): {total:+.2f}% over the last {span:.1f} years = "
+              f"{total / span:+.3f}%/year, {positive}/{N_FOLDS - N_FOLDS // 2} blocks positive"
+              f"   [{' | '.join(picks)}]")
+
+    # Year by year: every weekend is scored by a rule chosen WITHOUT its own
+    # tenth, so this is the stability of the validated model, not of a fit.
+    fixed_by_year: dict[int, list[float]] = {}
+    for r in records:
+        x = weekend_net(r, 15, -1, cost)
+        if x is not None:
+            fixed_by_year.setdefault(r["date"].year, []).append(x)
+    print(f"\nYEAR BY YEAR, net % of notional after real cost")
+    print(f"  {'year':<6}{'cost %':>8}{'trades':>8}{'LOTO net_total':>16}{'LOTO t':>10}"
+          f"{'fixed 15 min':>14}")
+    for y in sorted(fixed_by_year):
+        a = sum(yearly["net_total"].get(y, []))
+        b = sum(yearly["t"].get(y, []))
+        c = sum(fixed_by_year[y])
+        print(f"  {y:<6}{cost[y]:>8.5f}{len(yearly['net_total'].get(y, [])):>8}"
+              f"{a:>+16.2f}{b:>+10.2f}{c:>+14.2f}")
+    for name, series in (("LOTO net_total", yearly["net_total"]), ("LOTO t", yearly["t"]),
+                         ("fixed 15 min", fixed_by_year)):
+        vals = [sum(v) for v in series.values()]
+        top2 = sorted(vals, reverse=True)[:2]
+        print(f"  {name:<15} {sum(1 for v in vals if v > 0)}/{len(vals)} years positive, "
+              f"median year {statistics.median(vals):+.2f}%, worst {min(vals):+.2f}%, "
+              f"best two years = {100 * sum(top2) / sum(vals):.0f}% of the total")
 
 
 def correlation(pairs: list[tuple]) -> float:
@@ -179,6 +335,8 @@ def main() -> None:
     print(f"  {positive} of {len(by_year)} years positive")
     print(f"  net after cost {net:+.5f}% per weekend, "
           f"about {net * len(records) / years:+.2f}% per year on notional")
+
+    validate(records, cost_by_year(rows))
 
 
 if __name__ == "__main__":
