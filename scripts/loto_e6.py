@@ -32,8 +32,10 @@ import csv
 from collections import Counter, defaultdict
 
 import numpy as np
+from pathlib import Path
 
-PNL = "/mnt/user-data/uploads/trading_nautilus/data/E6_pnl_lagged_fast.csv"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+PNL = str(DATA_DIR / "E6_pnl_lagged_fast.csv")
 PAIRINGS = ("a", "b", "c")
 COST_FIJO = 0.00455
 N_FOLDS = 10

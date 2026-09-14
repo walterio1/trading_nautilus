@@ -16,8 +16,10 @@ al coste de SU año.
 import statistics
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
-DATA = "/mnt/user-data/uploads/trading_nautilus/data/ES_full_1min_continuous_ratio_adjusted.txt"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA = str(DATA_DIR / "ES_full_1min_continuous_ratio_adjusted.txt")
 ENTRY_HORIZONS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360]
 MIN_GAP_HOURS = 40.0
 

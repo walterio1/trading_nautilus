@@ -26,9 +26,11 @@ import csv
 import math
 import statistics
 from collections import defaultdict
+from pathlib import Path
 
 
-CSV = "/home/claude/es/ES_15min.csv"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+CSV = str(DATA_DIR / "ES_15min.csv")
 
 
 def cargar(max_gap=None):

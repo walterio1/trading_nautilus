@@ -22,9 +22,11 @@ import csv
 from collections import Counter, defaultdict
 
 import numpy as np
+from pathlib import Path
 
-ES = "/home/claude/es/ES_pnl_lagged_fast.csv"
-E6 = "/mnt/user-data/uploads/trading_nautilus/data/E6_pnl_lagged_fast.csv"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+ES = str(DATA_DIR / "ES_pnl_lagged_fast.csv")
+E6 = str(DATA_DIR / "E6_pnl_lagged_fast.csv")
 VENTANAS = ("n_fast", "n_slow", "n_super")
 CASOS = {(-1, -1): "A debil/debil", (+1, +1): "B fuerte/fuerte",
          (-1, +1): "C ESdeb/E6fue", (+1, -1): "D ESfue/E6deb"}

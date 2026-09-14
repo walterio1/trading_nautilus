@@ -55,8 +55,10 @@ much0, asi que la comision manda. Se reporta a 0, 2 y 4 USD por ida y vuelta.
 
 import numpy as np
 from collections import Counter, defaultdict
+from pathlib import Path
 
-DATOS = "/mnt/user-data/uploads/trading_nautilus/data/ES_full_1min_continuous_ratio_adjusted.txt"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATOS = str(DATA_DIR / "ES_full_1min_continuous_ratio_adjusted.txt")
 
 
 def clave(s):

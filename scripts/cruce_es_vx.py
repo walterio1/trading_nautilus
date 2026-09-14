@@ -45,10 +45,12 @@ import csv
 from collections import Counter, defaultdict
 
 import numpy as np
+from pathlib import Path
 
-ES = "/home/claude/es/ES_pnl_lagged_fast.csv"
-VX = "/home/claude/es/VX_pnl_lagged_fast.csv"
-VX_BARS = "/home/claude/es/VX_15min.csv"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+ES = str(DATA_DIR / "ES_pnl_lagged_fast.csv")
+VX = str(DATA_DIR / "VX_pnl_lagged_fast.csv")
+VX_BARS = str(DATA_DIR / "VX_15min.csv")
 VENTANAS = ("n_fast", "n_slow", "n_super")
 HORIZONTES = (1, 2, 4, 8, 16, 32)
 CASOS = {(-1, -1): "A  ES baja / VIX baja", (+1, +1): "B  ES sube / VIX sube",

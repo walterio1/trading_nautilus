@@ -46,10 +46,12 @@ import csv
 from collections import Counter, defaultdict
 
 import numpy as np
+from pathlib import Path
 
-ES_MIN = "/mnt/user-data/uploads/trading_nautilus/data/ES_full_1min_continuous_ratio_adjusted.txt"
-ES_15 = "/home/claude/es/ES_pnl_lagged_fast.csv"
-E6_15 = "/mnt/user-data/uploads/trading_nautilus/data/E6_pnl_lagged_fast.csv"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+ES_MIN = str(DATA_DIR / "ES_full_1min_continuous_ratio_adjusted.txt")
+ES_15 = str(DATA_DIR / "ES_pnl_lagged_fast.csv")
+E6_15 = str(DATA_DIR / "E6_pnl_lagged_fast.csv")
 VENTANAS = ("n_fast", "n_slow", "n_super")
 ESPERA = 7          # minutos de vida de la orden limitada
 TICKS = (1, 2, 3, 4)
