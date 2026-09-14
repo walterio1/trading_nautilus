@@ -1,10 +1,11 @@
 """
-Weekend gap study for the E6 continuous contract.
+Weekend gap study, written for the E6 continuous contract and usable on any
+FirstRate 1-minute futures file (costs are measured per year from the file).
 
-The weekend gap is large relative to costs: the mean absolute Friday-close to
-Sunday-open move is about 0.096% of notional against roughly 0.00455% for a
-round trip, so a sign call only has to be right about 52.4% of the time to pay
-for itself. That is a far lower bar than any intraday variant in this project,
+The weekend gap is large relative to costs: on E6 the mean absolute
+Friday-close to Sunday-open move is about 0.096% of notional against roughly
+0.0056% for a round trip at the real per-year tick, so a sign call only has to
+be right a little over half the time to pay for itself. That is a far lower bar than any intraday variant in this project,
 where signal and spread are the same order of magnitude.
 
 Entry signal
@@ -36,7 +37,6 @@ import statistics
 from collections import Counter, defaultdict
 from datetime import datetime
 
-COST_PCT = 0.00455          # one tick round trip at EUR/USD 1.10
 ENTRY_HORIZONS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360]
 EXIT_HORIZONS = [0, 15, 30, 60, 120, 240, 480, 960, 1440, 2880]
 N_FOLDS = 10
@@ -249,6 +249,105 @@ def validate(records: list[dict], cost: dict[int, float]) -> None:
               f"best two years = {100 * sum(top2) / sum(vals):.0f}% of the total")
 
 
+def ensembles(records: list[dict], cost: dict[int, float]) -> None:
+    """
+    Replace the single best window with a combination of windows.
+
+    The single-window LOTO loses most of its edge on WHICH plateau window it
+    picks per fold (fold 1 picked 60 min and lost -3.71%). Combining windows
+    removes that choice. To avoid sneaking a new in-sample choice back in, the
+    combination is either fixed a priori over ALL windows, or selected inside
+    each training set:
+
+      vote_all      position = sign of the sum of fade votes over all windows
+      mean_all      position = mean of the fade votes, a fraction in [-1, 1]:
+                    bigger when the windows agree, cost scaled by |position|
+      mean_pos_in   mean over the windows whose fade net is positive on the
+                    training 90% of that fold
+      mean_top5_in  mean over the five best windows on the training 90%
+
+    Fade is kept as the direction: the single-window LOTO chose it in 10/10
+    folds, so leaving it free would change nothing.
+    """
+    n = len(records)
+    edges = [n * k // N_FOLDS for k in range(N_FOLDS + 1)]
+    years = (records[-1]["date"] - records[0]["date"]).days / 365.25
+    ys = sorted({r["date"].year for r in records})
+
+    def vote(rec, w):
+        m = rec[f"pre{w}"]
+        return -1 if m > 0 else (1 if m < 0 else 0)
+
+    def net(rec, windows, mode):
+        v = [vote(rec, w) for w in windows]
+        pos = (1 if sum(v) > 0 else (-1 if sum(v) < 0 else 0)) if mode == "vote" else sum(v) / len(v)
+        if pos == 0:
+            return None
+        return pos * rec["gap"] - abs(pos) * cost[rec["date"].year]
+
+    def window_net(idx, w):
+        return sum(x for x in (net(records[i], [w], "vote") for i in idx) if x is not None)
+
+    def windows_for(train, variant):
+        if variant in ("vote_all", "mean_all"):
+            return ENTRY_HORIZONS
+        ranked = sorted(ENTRY_HORIZONS, key=lambda w: -window_net(train, w))
+        if variant == "mean_pos_in":
+            chosen = [w for w in ranked if window_net(train, w) > 0]
+            return chosen or ranked[:1]
+        return ranked[:5]
+
+    def single_best(train):
+        return [max(ENTRY_HORIZONS, key=lambda w: window_net(train, w))]
+
+    variants = {
+        "single best (LOTO)": (lambda tr: single_best(tr), "vote"),
+        "vote_all": (lambda tr: windows_for(tr, "vote_all"), "vote"),
+        "mean_all": (lambda tr: windows_for(tr, "mean_all"), "mean"),
+        "mean_pos_in": (lambda tr: windows_for(tr, "mean_pos_in"), "mean"),
+        "mean_top5_in": (lambda tr: windows_for(tr, "mean_top5_in"), "mean"),
+    }
+
+    print(f"\n{'#' * 100}\nENSEMBLES OF WINDOWS - LOTO, fade, real cost\n{'#' * 100}")
+    print(f"  {'variant':<20}{'%/year':>8}{'folds+':>8}{'years+':>8}{'median yr':>10}"
+          f"{'worst yr':>10}{'top2 share':>11}{'exp. %/yr':>10}{'blocks+':>8}")
+    yearly_all = {}
+    for name, (pick, mode) in variants.items():
+        by_year: dict[int, float] = defaultdict(float)
+        total, folds_pos = 0.0, 0
+        for f in range(N_FOLDS):
+            train = [i for i in range(n) if i < edges[f] or i >= edges[f + 1]]
+            windows = pick(train)
+            fold_net = 0.0
+            for i in range(edges[f], edges[f + 1]):
+                x = net(records[i], windows, mode)
+                if x is not None:
+                    fold_net += x
+                    by_year[records[i]["date"].year] += x
+            total += fold_net
+            folds_pos += fold_net > 0
+        exp_total, exp_pos = 0.0, 0
+        for k in range(N_FOLDS // 2, N_FOLDS):
+            windows = pick(list(range(edges[k])))
+            block = sum(x for x in (net(records[i], windows, mode)
+                                    for i in range(edges[k], edges[k + 1])) if x is not None)
+            exp_total += block
+            exp_pos += block > 0
+        span = (records[-1]["date"] - records[edges[N_FOLDS // 2]]["date"]).days / 365.25
+        vals = [by_year[y] for y in ys]
+        top2 = sorted(vals, reverse=True)[:2]
+        share = f"{100 * sum(top2) / total:.0f}%" if total > 0 else "n/a"
+        yearly_all[name] = by_year
+        print(f"  {name:<20}{total / years:>+8.3f}{folds_pos:>5}/{N_FOLDS}"
+              f"{sum(1 for v in vals if v > 0):>5}/{len(ys)}{statistics.median(vals):>+10.2f}"
+              f"{min(vals):>+10.2f}{share:>11}{exp_total / span:>+10.3f}{exp_pos:>5}/5")
+
+    print(f"\n  YEAR BY YEAR (net %)")
+    print("  " + f"{'year':<6}" + "".join(f"{name[:18]:>20}" for name in variants))
+    for y in ys:
+        print("  " + f"{y:<6}" + "".join(f"{yearly_all[name][y]:>+20.2f}" for name in variants))
+
+
 def correlation(pairs: list[tuple]) -> float:
     mx = statistics.mean([a for a, _ in pairs])
     my = statistics.mean([b for _, b in pairs])
@@ -280,13 +379,20 @@ def main() -> None:
         if ok:
             records.append(rec)
 
+    # Real one-tick cost per year for whichever instrument is loaded, so the
+    # script works on ES as well as E6; `cost_mean` is only for headline ratios.
+    cost = cost_by_year(rows)
+    cost_mean = statistics.mean(cost[r["date"].year] for r in records)
+    print(f"real one-tick cost: mean {cost_mean:.5f}% of notional, "
+          f"{min(cost.values()):.5f}%-{max(cost.values()):.5f}% by year")
+
     gaps = [r["gap"] for r in records]
     absmean = statistics.mean([abs(g) for g in gaps])
     mean, t = stats(gaps)
     print("\nGap, Friday close to Sunday open:")
     print(f"  mean {mean:+.5f}%  t {t:+.2f}   median {statistics.median(gaps):+.5f}%")
-    print(f"  mean |gap| {absmean:.5f}%  = {absmean / COST_PCT:.1f}x a round trip")
-    print(f"  sign accuracy needed to cover cost: {50 * (1 + COST_PCT / absmean):.1f}%")
+    print(f"  mean |gap| {absmean:.5f}%  = {absmean / cost_mean:.1f}x a round trip")
+    print(f"  sign accuracy needed to cover cost: {50 * (1 + cost_mean / absmean):.1f}%")
 
     half = len(records) // 2
     print("\nENTRY SCAN - fade the last N minutes of Friday, exit at the open")
@@ -301,7 +407,7 @@ def main() -> None:
         mb, tb = stats(v[half:])
         hit = 100 * sum(1 for x in v if x > 0) / len(v)
         print(f"{w:>7} m{mt:>+11.5f}{tt:>+7.2f}{ma:>+11.5f}{ta:>+7.2f}{mb:>+11.5f}{tb:>+7.2f}"
-              f"{hit:>7.1f}%{mt / COST_PCT:>8.2f}x")
+              f"{hit:>7.1f}%{mt / cost_mean:>8.2f}x")
 
     w = args.entry_window
     print(f"\nEXIT SCAN - entry fades the last {w} minutes; exit N bars after the open")
@@ -316,7 +422,7 @@ def main() -> None:
         hit = 100 * sum(1 for x in v if x > 0) / len(v)
         lab = "open" if h == 0 else f"+{h}"
         print(f"{lab:>9}{mt:>+11.5f}{tt:>+7.2f}{ma:>+11.5f}{ta:>+7.2f}{mb:>+11.5f}{tb:>+7.2f}"
-              f"{hit:>7.1f}%{mt / COST_PCT:>8.2f}x")
+              f"{hit:>7.1f}%{mt / cost_mean:>8.2f}x")
 
     print("\nGAP CONTINUATION - correlation between the gap and the move after the open")
     print("  negative means the gap fills, positive means it keeps going")
@@ -330,13 +436,15 @@ def main() -> None:
         by_year.setdefault(r["date"].year, []).append((-1 if r[f"pre{w}"] > 0 else 1) * r["gap"])
     positive = sum(1 for y in by_year if statistics.mean(by_year[y]) > 0)
     years = (records[-1]["date"] - records[0]["date"]).days / 365.25
-    net = statistics.mean([(-1 if r[f"pre{w}"] > 0 else 1) * r["gap"] for r in records]) - COST_PCT
+    net = statistics.mean([(-1 if r[f"pre{w}"] > 0 else 1) * r["gap"] - cost[r["date"].year]
+                           for r in records])
     print(f"\nYEARLY, fading the last {w} minutes and exiting at the open:")
     print(f"  {positive} of {len(by_year)} years positive")
     print(f"  net after cost {net:+.5f}% per weekend, "
           f"about {net * len(records) / years:+.2f}% per year on notional")
 
-    validate(records, cost_by_year(rows))
+    validate(records, cost)
+    ensembles(records, cost)
 
 
 if __name__ == "__main__":

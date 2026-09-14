@@ -11,6 +11,11 @@
 > (+0.57 %/año, 5 de 5 bloques positivos). Además, el coste real de 2008-2015
 > era 1.5-2× el supuesto aquí. El cuerpo del documento se conserva tal como se
 > escribió el 2026-09-09; las correcciones están en la sección 6.
+>
+> **Segunda revisión, misma fecha (sección 7):** con LOTO y desglose anual, la
+> estrategia A con **una sola ventana** gana +0.36 %/año y **no es estable** (9 de
+> 18 años positivos). **Combinando todas las ventanas** sube a +0.58-0.70 %/año y
+> 11-12 de 18 años positivos, sin elegir nada con los datos salvo la dirección.
 
 ---
 
@@ -405,6 +410,72 @@ Lo que sí queda de B: la configuración tiene contenido real (el LOTO la elige
 rescatar, el trabajo pendiente es **hacer la elección robusta**, no afinarla:
 por ejemplo fijar el cuantil 0.20 a priori y no reoptimizarlo, o promediar
 cortes vecinos en vez de quedarse con el mejor.
+
+---
+
+## 7. Addendum 2026-09-14 (b) — salto de fin de semana: LOTO, estabilidad anual y combinación de ventanas
+
+Script: `scripts/weekend_gap.py` (secciones de validación al final de la salida).
+Coste real por año; un viernes sin movimiento en la ventana no se opera.
+
+### 7.1 LOTO sobre ventana y dirección
+
+En cada pliegue se eligen **a la vez** la ventana de entrada (5 min a 6 h) y la
+dirección (desvanecer o seguir) con el 90 % restante, porque "desvanecer" también
+salió de mirar la muestra.
+
+| | resultado |
+|---|---|
+| Regla fija de 15 min, elegida mirando todo | +0.93 %/año, t = +2.98 |
+| **LOTO** | **+0.36 %/año**, 7/10 pliegues positivos |
+| Ventana creciente (últimos 8.9 años) | +0.60 %/año, 5/5 bloques |
+
+- **La estructura es robusta:** desvanecer se elige en 10/10 pliegues y la ventana
+  cae siempre en la meseta 15-60 min (6× 20 min, 3× 15, 1× 60). Con los dos
+  objetivos de selección las elecciones son idénticas.
+- **El dinero no:** menos de la mitad que la regla fija. Casi toda la diferencia
+  está en el pliegue 1 (2008-09): sin ese periodo se eligió 60 min y perdió −3.71 %.
+
+### 7.2 Estabilidad año a año con una sola ventana: mala
+
+- **9 de 18 años positivos**, año mediano **+0.01 %**, peor año 2008 (−2.84 %).
+- **Los dos mejores años (2011 +4.09 %, 2020 +2.74 %) suman el 107 % del total**:
+  el resto de años en conjunto pierde.
+- La regla fija de 15 min parecía estable (12/18, mediana +0.36 %) solo porque se
+  eligió conociendo el resultado.
+
+### 7.3 Combinar ventanas en vez de elegir una
+
+La pérdida del LOTO viene de **qué** ventana de la meseta toca en cada pliegue.
+Combinarlas elimina esa elección. Para no colar otra elección hecha mirando los
+datos, las combinaciones son fijas sobre **todas** las ventanas, o se seleccionan
+dentro de cada 90 % de entrenamiento:
+
+| variante | %/año | pliegues + | años + | año mediano | peor año | 2 mejores años | ventana creciente |
+|---|---|---|---|---|---|---|---|
+| una ventana (LOTO) | +0.36 | 7/10 | 9/18 | +0.01 | −2.84 | 107 % | +0.60, 5/5 |
+| **voto, todas** | **+0.70** | 7/10 | 10/18 | +0.28 | −2.29 | 66 % | +0.75, 5/5 |
+| **media, todas** | +0.58 | 7/10 | 11/18 | +0.35 | −2.08 | 58 % | +0.60, 5/5 |
+| media, positivas en entrenamiento | +0.64 | 7/10 | **12/18** | **+0.40** | −2.08 | **56 %** | +0.61, 5/5 |
+| media, 5 mejores en entrenamiento | +0.59 | 7/10 | 12/18 | +0.30 | **−1.77** | 66 % | +0.53, 5/5 |
+
+- **Todas las combinaciones casi duplican** la ventana única y **mejoran la
+  estabilidad** en todas las métricas: más años positivos, año mediano claramente
+  positivo, y el beneficio deja de depender de dos años.
+- **Voto y media sobre todas las ventanas no eligen nada con los datos** salvo la
+  dirección, que el LOTO fijó 10/10. Son las más honestas.
+- **Voto** maximiza el %/año; **media sobre las positivas** es la más estable.
+  "Media" opera fraccionalmente: posición grande cuando las ventanas coinciden,
+  pequeña cuando discrepan, con el coste escalado al tamaño.
+- **Lo que no se arregla:** 2010 pierde en todas las variantes (−1.8 a −2.3 %), y
+  2008-2010 sigue siendo un tramo malo.
+
+### 7.4 Conclusión revisada de la estrategia A
+
+La ventaja existe y la dirección es inequívoca, pero su tamaño realista es
+**~0.6-0.7 %/año sobre nominal** y con años perdedores frecuentes. La forma de
+operarla es **combinando ventanas**, no apostando por una. La regla fija de
+15-20 min de la sección 2 sobreestimaba el resultado.
 
 ---
 
