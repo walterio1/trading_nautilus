@@ -5,6 +5,13 @@
 **Datos:** 6 145 287 barras de 1 minuto, 2008-01-02 a 2025-11-05 (FirstRate Data)
 **Scripts:** `scripts/weekend_gap.py`, `scripts/regime_variance.py`, `scripts/pnl_series.py`
 
+> **⚠ ADDENDUM 2026-09-14 — leer antes que el resto.** La validación estricta
+> con ventana creciente (sección 6) **no confirma la estrategia B**: su resultado
+> fuera de muestra cae a +0.03 / +0.37 %/año. **La estrategia A sí la supera**
+> (+0.57 %/año, 5 de 5 bloques positivos). Además, el coste real de 2008-2015
+> era 1.5-2× el supuesto aquí. El cuerpo del documento se conserva tal como se
+> escribió el 2026-09-09; las correcciones están en la sección 6.
+
 ---
 
 ## Resumen ejecutivo
@@ -287,6 +294,117 @@ funcionan lo hacen por **escala** (el salto es 21× el coste) o por **selección
    el umbral en % —que depende del nivel de precio— afecta a la rentabilidad.
 4. **Dimensionamiento.** Las cifras son sobre nominal. Con años de −3.4 % y rachas
    de cuatro años negativos, apalancar agresivamente sería temerario.
+
+---
+
+## 6. Addendum 2026-09-14 — validación estricta y coste real
+
+Motivado por las tareas anotadas tras escribir este memorándum: las elecciones
+de la estrategia B (operar C, descartar A y B, cortar el ER en 0.055) se hicieron
+**mirando la muestra entera**, así que son exógenas. Se validan de dos formas:
+
+- **Opción 1 — LOTO** (leave one tenth out): 10 bloques; en cada uno se elige
+  la configuración con el 90 % restante y se opera el 10 % apartado. Tiene un
+  pequeño look-ahead: entrena también con datos posteriores al bloque.
+- **Opción 2 — ventana creciente**: entrenar con 0-50 %, operar 50-60 %;
+  entrenar con 0-60 %, operar 60-70 %… Estrictamente fuera de muestra.
+
+En ambas, el optimizador elige **dentro de la ventana de entrenamiento** entre
+432 combinaciones: operativa (A/B/C) × ventana del ER (tramo previo, N_fast,
+N_slow, N_super, 2·N_super, día, semana, mes) × cuantil de corte × dirección.
+
+Script: `scripts/loto_e6.py`.
+
+### 6.1 El coste real no era constante
+
+Medida la rejilla de ticks de la propia serie año a año (el menor incremento que
+se repite en ≥1 % de barras, dividido por el precio medio; el factor del ajuste
+por ratio se cancela en el cociente):
+
+| periodo | rejilla | coste real | vs 0.00455 % |
+|---|---|---|---|
+| 2008-2015 | 0.00012 | 0.0068-0.0090 % | **1.50-1.97×** |
+| 2016 | 0.00006 | 0.0045 % | transición |
+| 2017-2025 | 0.00005 | 0.0037-0.0045 % | 0.81-0.99× |
+
+El tick efectivo del E6 se **partió por la mitad en 2016**. Los primeros ocho
+años costaban bastante más de lo supuesto; los últimos nueve, algo menos.
+
+Impacto, pequeño en ambas estrategias porque el bruto domina:
+
+| | coste fijo | coste real |
+|---|---|---|
+| A — salto de fin de semana | +0.91 %/año | **+0.85 %/año** (t = +2.71) |
+| B — ER, muestra completa | +44.17 % | **+41.52 %** |
+
+(Solo spread, sin comisiones.)
+
+### 6.2 Estrategia B: el LOTO la confirma, la ventana creciente no
+
+**LOTO (opción 1):** en los **10 de 10 pliegues** el optimizador elige
+exactamente la configuración del memorándum — **C · tramo previo · cuantil 0.20
+(corte 0.054-0.055) · reversión**. Resultado: **+40.32 % = +2.24 %/año**, 9 de 10
+pliegues positivos. Las elecciones "exógenas" son las que los datos eligen solos.
+
+Sobre usar la **mediana** como corte (cuantil 0.50): es peor. En el único pliegue
+donde el optimizador la eligió perdió −10.00 %. El corte bueno es el cuantil 0.20.
+
+**Ventana creciente (opción 2), estrictamente fuera de muestra:**
+
+| objetivo | neto últimos ~9 años | %/año | bloques + |
+|---|---|---|---|
+| neto total | +0.24 % | **+0.03** | 3 / 5 |
+| t del neto | +3.36 % | **+0.37** | 3 / 5 |
+
+**La ventaja desaparece.** No porque la configuración deje de funcionar —la misma
+configuración fija (C, cuantil 0.20) rinde +9.28 % en esos mismos bloques, ~1 %/año—
+sino porque **con solo el pasado no se habría elegido de forma fiable**. En 3 de 5
+bloques, entrenar con los datos disponibles eligió un corte más flojo (cuantil
+0.30, corte ≈0.083) o una ventana semanal, y esas elecciones perdieron.
+
+Es la consecuencia práctica del precipicio ya visto en la sección 3: la zona
+rentable es estrecha (cuantil ≤ 0.20) y justo fuera de ella se pierde. **Un
+óptimo en filo de navaja no se estima bien en tiempo real.** El "pequeño pecado"
+del LOTO no es pequeño aquí: es la diferencia entre +2.24 %/año y casi cero.
+
+La concentración temporal persiste con coste real: 2008 aporta el 35.5 % del
+total y 2008 + 2022 el 55 %.
+
+### 6.3 Estrategia A: supera la ventana creciente
+
+Mismo criterio aplicado al salto de fin de semana, eligiendo la ventana de
+entrada (5 min a 6 h) solo con el pasado y con coste real por año:
+
+| bloque operado | ventana elegida | neto |
+|---|---|---|
+| 50-60 % | 20 min | +0.55 % |
+| 60-70 % | 20 min | +2.41 % |
+| 70-80 % | 20 min | +0.47 % |
+| 80-90 % | 20 min | +0.98 % |
+| 90-100 % | 20 min | +0.68 % |
+| **total ~9 años** | | **+5.09 % = +0.57 %/año, 5 / 5 bloques +** |
+
+La elección es **estable** (20 minutos en los cinco bloques, con los dos
+objetivos) y todos los bloques ganan. Es lo esperable de la meseta: si
+cualquier ventana entre 10 min y 3 h funciona, elegir con datos parciales no
+puede equivocarse mucho.
+
+### 6.4 Conclusión revisada
+
+| | criterio estricto (ventana creciente) | veredicto |
+|---|---|---|
+| **A — salto de fin de semana** | +0.57 %/año, 5/5 bloques, elección estable | **validada** |
+| **B — filtro ER** | +0.03 a +0.37 %/año, 3/5 bloques, elección inestable | **no validada en tiempo real** |
+
+El orden del resumen ejecutivo **se invierte**: el 2.27 %/año de B era
+rentabilidad de una configuración elegida conociendo el futuro; la cifra
+alcanzable operando es la de A.
+
+Lo que sí queda de B: la configuración tiene contenido real (el LOTO la elige
+10/10 y rinde ~1 %/año en la segunda mitad con corte fijo). Si se quisiera
+rescatar, el trabajo pendiente es **hacer la elección robusta**, no afinarla:
+por ejemplo fijar el cuantil 0.20 a priori y no reoptimizarlo, o promediar
+cortes vecinos en vez de quedarse con el mejor.
 
 ---
 
