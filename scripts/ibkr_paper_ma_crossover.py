@@ -1,5 +1,9 @@
-# ratio de varianza como régimen
-# como tratar el salto de día (fin de semana): compra o venta al cierre del vie, deshacer inicio semana
+# como endogenizar lo exógeno: C en vez de B y A descartado;
+# corte del ER en 0,055 (efficiency ratio) - opción: la mediana? (suponer no es exógena)
+# opción 1: k-fold 10% LOTO (leave one tenth out) , pequeño pecado de look-ahead, 
+# pero es un test de paper-trading, no de backtest y se tradea en muestra no conocida al optimizar
+# opción 2: ventana optimización 50%, trade siguiente 10%, luego ventana 60% trade 10%...
+# solo así los resultados serán OOS (out of sample), más estricta la opción 2
 
 """
 Minimal paper-trading test: SMA crossover strategy on Interactive Brokers (TWS/IB Gateway).
